@@ -35,7 +35,7 @@ jobs:
 
           SOURCE = Path("registry_sentinel.py")
           CHANGELOG = Path("CHANGELOG.md")
-          META_FILES = {"CLAUDE.md", ".gitignore"}
+          META_FILES = {"CLAUDE.md", "CHANGELOG.md", ".gitignore"}
           META_PREFIXES = (".github/", ".claude/", "tests/")
 
           def fail(message):

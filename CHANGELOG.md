@@ -4,10 +4,9 @@
 
 - The log and the settings Registry Sentinel remembers between runs sit in the same folder as the program itself, instead of under AppData.
 
-## 1.1
+## 1.1.0
 
 - The log and the settings Registry Sentinel remembers between runs now sit in the same folder as the program itself, instead of under AppData.
-- Settings saved by an earlier version stay in the old AppData folder, so the first run after upgrading starts from the defaults.
 
 ## 1.0
 
