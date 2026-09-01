@@ -156,6 +156,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
+      - name: Run tests
+        run: python -m unittest discover -s tests
+
       - name: Build Registry Sentinel
         run: >
           pyinstaller --noconfirm --onefile --windowed

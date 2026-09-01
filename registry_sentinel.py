@@ -19,6 +19,7 @@ from concurrent.futures import FIRST_COMPLETED, CancelledError, ThreadPoolExecut
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import partialmethod
+from itertools import count
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional, Sequence, Union
 
@@ -88,7 +89,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.1.2"
+APP_VERSION = "1.1.3"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -420,6 +421,9 @@ def _views_compatible(first: Optional[int], second: Optional[int]) -> bool:
     return _VIEW_INDEX[first] == _VIEW_INDEX[second]
 
 
+_ENTRY_SEQUENCE = count()
+
+
 @dataclass(slots=True)
 class RegistryEntry:
     hive: int
@@ -445,7 +449,7 @@ class RegistryEntry:
     search_blob: str = field(init=False, repr=False, default="")
 
     def __post_init__(self) -> None:
-        self.unique_id = f"{self.source_line}:{self.hive}:{self.path}"
+        self.unique_id = str(next(_ENTRY_SEQUENCE))
         self.refresh_search_blob()
 
     @property
@@ -856,6 +860,7 @@ class RegistryCommandParser:
     REM_COMMENT = re.compile(r"rem(?:\s|$)", re.IGNORECASE)
 
     _REDIRECT = re.compile(r"\d*>{1,2}(?:&\d+|\S+)?")
+    _SEPARATORS = frozenset(("&", "&&", "|", "||"))
     _OPERATIONS = {"add": Operation.ADD, "delete": Operation.DELETE}
     _UNVERIFIED_OPERATIONS = frozenset(
         ("query", "copy", "save", "restore", "load", "unload", "compare", "export", "import", "flags")
@@ -940,16 +945,30 @@ class RegistryCommandParser:
             tokens.append("".join(token))
         return tokens
 
+    @classmethod
+    def _split_commands(cls, tokens: list[str]) -> Iterable[list[str]]:
+        command: list[str] = []
+        for token in tokens:
+            if token in cls._SEPARATORS:
+                if command:
+                    yield command
+                command = []
+            else:
+                command.append(token)
+        if command:
+            yield command
+
     def _parse_line(self, line: str, line_number: int) -> list[RegistryEntry]:
-        tokens = self._tokenize(line)
-        command = tokens[0].rsplit("\\", 1)[-1].casefold() if tokens else ""
-        if command not in self._COMMAND_NAMES:
-            return []
-        try:
-            return self._parse_reg_command(tokens, line, line_number)
-        except _LineSyntaxError as exc:
-            hive, path, _ = self._resolve_key(tokens[2]) if len(tokens) >= 3 else (0, "", "")
-            return [_syntax_error_entry(line, line_number, str(exc), hive=hive, path=path)]
+        entries: list[RegistryEntry] = []
+        for tokens in self._split_commands(self._tokenize(line)):
+            if tokens[0].rsplit("\\", 1)[-1].casefold() not in self._COMMAND_NAMES:
+                continue
+            try:
+                entries.extend(self._parse_reg_command(tokens, line, line_number))
+            except _LineSyntaxError as exc:
+                hive, path, _ = self._resolve_key(tokens[2]) if len(tokens) >= 3 else (0, "", "")
+                entries.append(_syntax_error_entry(line, line_number, str(exc), hive=hive, path=path))
+        return entries
 
     @staticmethod
     def _resolve_key(raw_path: str) -> tuple[int, str, str]:

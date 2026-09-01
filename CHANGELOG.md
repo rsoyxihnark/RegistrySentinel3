@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.3
+
+- A `reg add` or `reg delete` line that chains onto another command with `&`, `&&`, `|` or `||` is now read normally, instead of being reported as a list error.
+- A line that runs more than one `reg` command now shows a row for each of them.
+
 ## 1.1.2
 
 - The entry count at the bottom of the window is no longer cut off when the list contains errors.
