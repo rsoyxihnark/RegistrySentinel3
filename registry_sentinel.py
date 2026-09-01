@@ -88,7 +88,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.1.1"
+APP_VERSION = "1.1.2"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -861,7 +861,8 @@ class RegistryCommandParser:
         ("query", "copy", "save", "restore", "load", "unload", "compare", "export", "import", "flags")
     )
     _COMMAND_NAMES = frozenset(("reg", "reg.exe"))
-    _ARGUMENT_SWITCHES = frozenset(("/v", "/t", "/d", "/s"))
+    _ADD_ARGUMENT_SWITCHES = frozenset(("/v", "/t", "/d", "/s"))
+    _DELETE_ARGUMENT_SWITCHES = frozenset(("/v",))
 
     def parse_file(self, file_path: Path) -> ParseResult:
         logger.info("Loading registry command list: %s", file_path)
@@ -977,11 +978,16 @@ class RegistryCommandParser:
 
         index = 3
         seen_switches: set[str] = set()
+        argument_switches = (
+            self._ADD_ARGUMENT_SWITCHES
+            if operation is Operation.ADD
+            else self._DELETE_ARGUMENT_SWITCHES
+        )
         while index < len(tokens):
             token = tokens[index]
             switch = token.casefold()
             index += 1
-            if switch in self._ARGUMENT_SWITCHES:
+            if switch in argument_switches:
                 if switch in seen_switches:
                     raise _LineSyntaxError(f"duplicate switch '{token}'")
                 seen_switches.add(switch)
@@ -2914,8 +2920,8 @@ class RegistrySentinel(QMainWindow):
         message_layout.setSpacing(2)
 
         self._status_label = QLabel("Ready")
-        self._status_font_metrics = QFontMetrics(self._status_label.font())
         self._status_label.setObjectName("statusText")
+        self._status_label.ensurePolished()
         self._status_label.setWordWrap(False)
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self._status_label.setFixedWidth(STATUS_MESSAGE_WIDTH)
@@ -2991,7 +2997,9 @@ class RegistrySentinel(QMainWindow):
         else:
             self._status_glow.setBlurRadius(0)
             self._status_glow.setColor(QColor(0, 0, 0, 0))
-        elided = self._status_font_metrics.elidedText(message, Qt.TextElideMode.ElideRight, STATUS_MESSAGE_WIDTH)
+        elided = self._status_label.fontMetrics().elidedText(
+            message, Qt.TextElideMode.ElideRight, STATUS_MESSAGE_WIDTH
+        )
         if not tooltip and elided != message:
             tooltip = message
         self._status_label.setText(elided)
@@ -3059,7 +3067,8 @@ class RegistrySentinel(QMainWindow):
             self._reset_progress()
 
     def _reserve_footer_toggle_widths(self) -> None:
-        fm = QFontMetrics(self._footer_entries_label.font())
+        self._footer_entries_label.ensurePolished()
+        fm = self._footer_entries_label.fontMetrics()
         widest = (
             "Entries: 88888 (hidden 88888) · "
             + STATE_CONFIG[MISMATCH_STATE]["label"].format(count=88888)
@@ -3095,11 +3104,7 @@ class RegistrySentinel(QMainWindow):
         return _program_dir() / "registry_sentinel.ini"
 
     def _default_list_dirs(self) -> tuple[Path, Path]:
-        app_dir = Path(__file__).resolve().parent
-        return (
-            Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else app_dir,
-            Path.cwd(),
-        )
+        return (_program_dir(), Path.cwd())
 
     def _candidate_lists_from(self, *directories: Path) -> Iterable[Path]:
         return (
@@ -4191,7 +4196,7 @@ class RegistrySentinel(QMainWindow):
             if outcome.failed > MAX_ERROR_DISPLAY:
                 message += "\n…"
             self._warn(
-                "Apply \u2014 Partial Failure",
+                "Apply: Partial Failure",
                 f"Success: {outcome.succeeded}\nFailed: {outcome.failed}\n\n{message}",
             )
         self._start_scan(manual=False)

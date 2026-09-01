@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2
+
+- The entry count at the bottom of the window is no longer cut off when the list contains errors.
+- A `reg delete` line that carries a `/s` switch is now always reported as a list error, instead of sometimes being read as a delete of the whole key.
+- The warning shown when only some fixes could be applied is now titled Apply: Partial Failure.
+
 ## 1.1.1
 
 - The log and the settings Registry Sentinel remembers between runs sit in the same folder as the program itself, instead of under AppData.
