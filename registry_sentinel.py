@@ -88,14 +88,15 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.0"
+APP_VERSION = "1.1"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
 
 def _app_data_dir() -> Path:
-    base = os.environ.get("LOCALAPPDATA")
-    return (Path(base) if base else Path.home()) / "RegistrySentinel"
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
 
 
 def _default_log_path() -> Path:

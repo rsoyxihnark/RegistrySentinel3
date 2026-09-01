@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1
+
+- The log and the settings Registry Sentinel remembers between runs now sit in the same folder as the program itself, instead of under AppData.
+- Settings saved by an earlier version stay in the old AppData folder, so the first run after upgrading starts from the defaults.
+
 ## 1.0
 
 - Registry Sentinel reads a list of `reg add` and `reg delete` commands and reports which ones the Windows registry already matches.

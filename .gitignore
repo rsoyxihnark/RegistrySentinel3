@@ -9,4 +9,6 @@ dist/
 *.spec
 *.manifest
 sentinel.log
+sentinel.log.*
+registry_sentinel.ini
 List.txt
