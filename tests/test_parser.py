@@ -23,6 +23,12 @@ class ParseTest(unittest.TestCase):
             self.assertEqual(entry.value_name, "A")
             self.assertEqual(entry.expected, "1")
 
+    def test_chained_command_without_spaces_is_not_a_list_error(self):
+        for tail in ("&&echo ok", "||echo failed", "|more", "&echo ok", ">nul"):
+            entry = self.only(rf"reg add HKLM\Software\Foo /v A /d 1 /f{tail}")
+            self.assertFalse(entry.syntax_error, tail)
+            self.assertEqual(entry.value_name, "A")
+
     def test_two_commands_on_one_line_both_parse(self):
         entries = self.parse(
             r"reg add HKLM\Software\Foo /v A /d 1 /f & reg delete HKLM\Software\Foo /v B /f"
@@ -82,6 +88,22 @@ class ListErrorTest(unittest.TestCase):
         self.assertIs(delete.value_type, sentinel.ValueType.RESET)
         self.assertEqual(delete.reset_plan.member_ids, [first.unique_id, second.unique_id])
         self.assertEqual(delete.reset_plan.keys, {"sub"})
+
+    def test_key_delete_before_an_add_on_the_same_line_is_a_reset(self):
+        delete, add = self.parse(
+            r"reg delete HKLM\Software\Foo /f & reg add HKLM\Software\Foo /v A /d 1 /f"
+        )
+        self.assertTrue(delete.is_reset)
+        self.assertEqual(delete.reset_plan.member_ids, [add.unique_id])
+        self.assertFalse(add.conflict)
+
+    def test_key_delete_after_an_add_on_the_same_line_wipes_it(self):
+        add, delete = self.parse(
+            r"reg add HKLM\Software\Foo /v A /d 1 /f & reg delete HKLM\Software\Foo /f"
+        )
+        self.assertTrue(add.conflict)
+        self.assertTrue(delete.conflict)
+        self.assertFalse(delete.is_reset)
 
     def test_key_delete_after_an_add_wipes_it(self):
         add, delete = self.parse(

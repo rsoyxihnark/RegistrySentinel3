@@ -89,7 +89,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.1.4"
+APP_VERSION = "1.1.5"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -445,11 +445,13 @@ class RegistryEntry:
     all_values: bool = False
     conflict: bool = False
     reset_plan: Optional[ResetPlan] = None
+    sequence: int = field(init=False)
     unique_id: str = field(init=False)
     search_blob: str = field(init=False, repr=False, default="")
 
     def __post_init__(self) -> None:
-        self.unique_id = str(next(_ENTRY_SEQUENCE))
+        self.sequence = next(_ENTRY_SEQUENCE)
+        self.unique_id = str(self.sequence)
         self.refresh_search_blob()
 
     @property
@@ -740,9 +742,9 @@ def _adds_under_key_deletes(
             root = "\\".join(parts[:depth])
             for delete in by_root.get((add.hive, root), ()):
                 ordered = (
-                    add.source_line > delete.source_line
+                    add.sequence > delete.sequence
                     if add_runs_last
-                    else add.source_line < delete.source_line
+                    else add.sequence < delete.sequence
                 )
                 if not ordered or not _views_compatible(delete.view, add.view):
                     continue
@@ -861,6 +863,7 @@ class RegistryCommandParser:
 
     _REDIRECT = re.compile(r"\d*>{1,2}(?:&\d+|\S+)?")
     _SEPARATORS = frozenset(("&", "&&", "|", "||"))
+    _CHAIN_CHARS = frozenset("&|")
     _OPERATIONS = {"add": Operation.ADD, "delete": Operation.DELETE}
     _UNVERIFIED_OPERATIONS = frozenset(
         ("query", "copy", "save", "restore", "load", "unload", "compare", "export", "import", "flags")
@@ -902,8 +905,8 @@ class RegistryCommandParser:
         _flag_conflicting_entries(entries)
         return ParseResult(entries, skipped)
 
-    @staticmethod
-    def _tokenize(line: str) -> list[str]:
+    @classmethod
+    def _tokenize(cls, line: str) -> list[str]:
         tokens: list[str] = []
         index = 0
         length = len(line)
@@ -912,6 +915,12 @@ class RegistryCommandParser:
                 index += 1
             if index >= length:
                 break
+            if line[index] in cls._CHAIN_CHARS:
+                start = index
+                while index < length and index - start < 2 and line[index] == line[start]:
+                    index += 1
+                tokens.append(line[start:index])
+                continue
             token: list[str] = []
             quoted = False
             while index < length:
@@ -939,11 +948,21 @@ class RegistryCommandParser:
                         quoted = not quoted
                 elif not quoted and char in " \t":
                     break
+                elif not quoted and cls._starts_new_token(token, char):
+                    break
                 else:
                     token.append(char)
                     index += 1
             tokens.append("".join(token))
         return tokens
+
+    @classmethod
+    def _starts_new_token(cls, token: list[str], char: str) -> bool:
+        if not token or token[-1].endswith(">"):
+            return False
+        if char in cls._CHAIN_CHARS:
+            return True
+        return char == ">" and not "".join(token).isdigit()
 
     @classmethod
     def _split_commands(cls, tokens: list[str]) -> Iterable[list[str]]:

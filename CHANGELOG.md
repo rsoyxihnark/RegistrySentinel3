@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.5
+
+- A `reg add` or `reg delete` that chains onto another command with no space around the `&`, `|` or `>` is now read normally, instead of being reported as a list error.
+- A `reg delete` of a key followed by `reg add` lines for that key on the same line is now read as a reset, the same as when those lines come afterwards.
+- A `reg add` that a later `reg delete` on the same line wipes is now reported as a list conflict.
+
 ## 1.1.4
 
 - A scan now reads each registry key once, however many ways the list names it.
