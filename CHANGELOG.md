@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.4
+
+- A scan now reads each registry key once, however many ways the list names it.
+
 ## 1.1.3
 
 - A `reg add` or `reg delete` line that chains onto another command with `&`, `&&`, `|` or `||` is now read normally, instead of being reported as a list error.

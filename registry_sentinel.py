@@ -89,7 +89,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.1.3"
+APP_VERSION = "1.1.4"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -1222,16 +1222,15 @@ class RegistryInspector(_CancellableWorker):
         entries: Iterable[RegistryEntry],
         progress: Optional[Callable[[int], None]] = None,
     ) -> list[ScanResult]:
-        groups: dict[tuple[int, str, Optional[int]], list[RegistryEntry]] = defaultdict(list)
+        groups: dict[tuple[int, str, int], list[RegistryEntry]] = defaultdict(list)
         for entry in entries:
-            groups[(entry.hive, entry.path, entry.view)].append(entry)
+            groups[(entry.hive, entry.path.casefold(), _VIEW_INDEX[entry.view])].append(entry)
 
         results: list[ScanResult] = []
         max_workers = max(1, min(MAX_SCAN_WORKERS, len(groups)))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             pending = {
-                executor.submit(self._scan_group, key, group)
-                for key, group in groups.items()
+                executor.submit(self._scan_group, group) for group in groups.values()
             }
 
             while pending:
@@ -1248,10 +1247,9 @@ class RegistryInspector(_CancellableWorker):
 
         return results
 
-    def _scan_group(
-        self, key: tuple[int, str, Optional[int]], entries: list[RegistryEntry]
-    ) -> list[ScanResult]:
-        hive, path, view = key
+    def _scan_group(self, entries: list[RegistryEntry]) -> list[ScanResult]:
+        first = entries[0]
+        hive, path, view = first.hive, first.path, first.view
         _raise_if_cancelled(self._cancelled)
         result = _open_key_in_view(hive, path, *_view_option(READ_VIEW_OPTIONS, view))
         if result.handle:
@@ -2848,8 +2846,6 @@ class RegistrySentinel(QMainWindow):
         header.setMinimumSectionSize(60)
         for col in range(self.table.columnCount()):
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
-
-        self._apply_saved_column_widths()
 
         for col, text in ((UID_COLUMN, "UID"), (SELECT_COLUMN, "Select")):
             header_item = self.table.horizontalHeaderItem(col)
