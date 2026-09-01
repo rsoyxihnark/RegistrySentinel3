@@ -88,19 +88,19 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.1"
+APP_VERSION = "1.1.1"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
 
-def _app_data_dir() -> Path:
+def _program_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent
 
 
 def _default_log_path() -> Path:
-    return _app_data_dir() / LOG_FILENAME
+    return _program_dir() / LOG_FILENAME
 
 
 def _log_uncaught_exception(exc_type, exc_value, exc_traceback) -> None:
@@ -3092,7 +3092,7 @@ class RegistrySentinel(QMainWindow):
 
 
     def _settings_path(self) -> Path:
-        return _app_data_dir() / "registry_sentinel.ini"
+        return _program_dir() / "registry_sentinel.ini"
 
     def _default_list_dirs(self) -> tuple[Path, Path]:
         app_dir = Path(__file__).resolve().parent

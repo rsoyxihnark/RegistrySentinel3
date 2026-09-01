@@ -76,6 +76,7 @@ The release workflow publishes the commit body as the release notes, so a commit
 - The version lives in one place in the source and nowhere else. Everything else reads it from there: the commit subject, the changelog heading, the git tag and the release all carry the same number, and the release workflow refuses to publish while any of them disagree.
 - That one place keeps the name it was given and is never renamed or moved, so a check can always find it. The gate reads the number out of the source itself rather than out of the commit subject, and tolerates the line endings the file is stored with.
 - Bump it in the same commit that ships the change, and never reuse a version that has already been released.
+- The size of the change picks the number. A fix, a tweak or anything else a user would call minor raises the last part, `1.1` to `1.1.1`. Something new they can use raises the middle part. The first part is the owner's to move, never the session's, so ask before raising it.
 - A version is published once. To correct a release that has already gone out, ship the fix under the next version rather than reusing the old one.
 
 ## Upgrades

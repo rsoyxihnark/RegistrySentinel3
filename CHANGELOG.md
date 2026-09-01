@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1
+
+- The log and the settings Registry Sentinel remembers between runs sit in the same folder as the program itself, instead of under AppData.
+
 ## 1.1
 
 - The log and the settings Registry Sentinel remembers between runs now sit in the same folder as the program itself, instead of under AppData.
