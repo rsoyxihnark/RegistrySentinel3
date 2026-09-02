@@ -45,8 +45,8 @@ class ScanGroupingTest(unittest.TestCase):
 
 
 class FakeKey:
-    def __init__(self, values=(), subkeys=None):
-        self.values = list(values)
+    def __init__(self, values=None, subkeys=None):
+        self.values = dict(values or {})
         self.subkeys = dict(subkeys or {})
 
     def Close(self):
@@ -60,9 +60,10 @@ class FakeKey:
 
 
 def enum_value(handle, index):
-    if index >= len(handle.values):
+    names = list(handle.values)
+    if index >= len(names):
         raise OSError("no more values")
-    return (handle.values[index], "", 1)
+    return (names[index], handle.values[names[index]], sentinel.winreg.REG_SZ)
 
 
 def enum_key(handle, index):
@@ -70,6 +71,12 @@ def enum_key(handle, index):
     if index >= len(names):
         raise OSError("no more keys")
     return names[index]
+
+
+def query_value(handle, name):
+    if name not in handle.values:
+        raise FileNotFoundError(name)
+    return (handle.values[name], sentinel.winreg.REG_SZ)
 
 
 def open_child(handle, name, reserved, access):
@@ -85,34 +92,44 @@ class ResetScanTest(unittest.TestCase):
 
     def scan_against(self, root):
         entries = sentinel.RegistryCommandParser()._parse_stream(self.LINES).entries
-        opened = sentinel.OpenKeyResult(root, sentinel.DEFAULT_VIEW_LABEL, None, 0)
-        with mock.patch.object(sentinel, "_open_key_in_view", lambda *a: opened), \
+
+        def open_at(hive, path, access, label):
+            node = root
+            for part in path.split("\\")[2:]:
+                node = node.subkeys[part]
+            return sentinel.OpenKeyResult(node, sentinel.DEFAULT_VIEW_LABEL, None, access)
+
+        with mock.patch.object(sentinel, "_open_key_in_view", open_at), \
                 mock.patch.object(sentinel.winreg, "EnumValue", enum_value), \
                 mock.patch.object(sentinel.winreg, "EnumKey", enum_key), \
+                mock.patch.object(sentinel.winreg, "QueryValueEx", query_value), \
                 mock.patch.object(sentinel.winreg, "OpenKey", open_child):
             results = sentinel.RegistryInspector().scan(entries)
         by_line = {e.unique_id: e.source_line for e in entries}
-        return next(r for r in results if by_line[r.entry_id] == 1)
+        return {by_line[r.entry_id]: r for r in results}
 
     def test_reset_is_compliant_when_the_key_holds_only_listed_entries(self):
-        root = FakeKey(["Keep"], {"Sub": FakeKey(["Inner"])})
-        self.assertIs(self.scan_against(root).compliant, True)
+        root = FakeKey({"Keep": "1"}, {"Sub": FakeKey({"Inner": "2"})})
+        results = self.scan_against(root)
+        self.assertIs(results[1].compliant, True)
+        self.assertIs(results[2].compliant, True)
+        self.assertIs(results[3].compliant, True)
 
     def test_reset_is_not_compliant_with_an_unlisted_value(self):
-        root = FakeKey(["Keep", "Stray"], {"Sub": FakeKey(["Inner"])})
-        result = self.scan_against(root)
+        root = FakeKey({"Keep": "1", "Stray": "x"}, {"Sub": FakeKey({"Inner": "2"})})
+        result = self.scan_against(root)[1]
         self.assertIs(result.compliant, False)
         self.assertIn("Stray", result.detail)
 
     def test_reset_is_not_compliant_with_an_unlisted_subkey(self):
-        root = FakeKey(["Keep"], {"Sub": FakeKey(["Inner"]), "Extra": FakeKey()})
-        result = self.scan_against(root)
+        root = FakeKey({"Keep": "1"}, {"Sub": FakeKey({"Inner": "2"}), "Extra": FakeKey()})
+        result = self.scan_against(root)[1]
         self.assertIs(result.compliant, False)
         self.assertIn("Extra", result.detail)
 
     def test_reset_is_not_compliant_with_an_unlisted_value_in_a_listed_subkey(self):
-        root = FakeKey(["Keep"], {"Sub": FakeKey(["Inner", "Stray"])})
-        result = self.scan_against(root)
+        root = FakeKey({"Keep": "1"}, {"Sub": FakeKey({"Inner": "2", "Stray": "x"})})
+        result = self.scan_against(root)[1]
         self.assertIs(result.compliant, False)
         self.assertIn("Stray", result.detail)
 
