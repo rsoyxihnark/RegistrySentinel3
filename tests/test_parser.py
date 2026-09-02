@@ -59,6 +59,25 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(result.entries, [])
         self.assertEqual(len(result.skipped_lines), 1)
 
+    def test_caret_escaped_separator_is_part_of_the_data(self):
+        for tail, expected in (("a^&b", "a&b"), ("a^|b", "a|b"), ("a^>b", "a>b"), ("a^^b", "a^b")):
+            entry = self.only(rf"reg add HKLM\Software\Foo /v A /t REG_SZ /d {tail} /f")
+            self.assertFalse(entry.syntax_error, tail)
+            self.assertEqual(entry.expected, expected, tail)
+
+    def test_caret_inside_quotes_is_literal(self):
+        entry = self.only(r'reg add HKLM\Software\Foo /v A /t REG_SZ /d "a^&b" /f')
+        self.assertEqual(entry.expected, "a^&b")
+
+    def test_caret_before_an_ordinary_character_is_dropped(self):
+        entry = self.only(r"reg add HKLM\Software\Foo /v A /t REG_SZ /d a^b /f")
+        self.assertEqual(entry.expected, "ab")
+
+    def test_caret_escaped_separator_standing_alone_is_a_list_error(self):
+        for tail in ("^& echo hi", "^> out.txt", "2^>&1"):
+            entry = self.only(rf"reg add HKLM\Software\Foo /v A /d 1 /f {tail}")
+            self.assertTrue(entry.syntax_error, tail)
+
 
 class ListErrorTest(unittest.TestCase):
     def parse(self, *lines):

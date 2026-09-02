@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.7
+
+- A caret now escapes the character after it, so a `&`, `|` or `>` written as `^&`, `^|` or `^>` reaches the value as data instead of cutting the line short.
+
 ## 1.1.6
 
 - A scan now checks which user profiles are loaded each time it runs, so an `HKU` entry is no longer judged against the profiles that were loaded when the list was opened.

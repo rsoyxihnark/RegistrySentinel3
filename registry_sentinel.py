@@ -89,7 +89,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.1.6"
+APP_VERSION = "1.1.7"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -857,6 +857,10 @@ def _writes_same_data(first: RegistryEntry, second: RegistryEntry) -> bool:
     )
 
 
+class _EscapedToken(str):
+    __slots__ = ()
+
+
 class RegistryCommandParser:
     COMMENT_PREFIXES = ("#", "//", ";", "::")
     REM_COMMENT = re.compile(r"rem(?:\s|$)", re.IGNORECASE)
@@ -864,6 +868,8 @@ class RegistryCommandParser:
     _REDIRECT = re.compile(r"\d*>{1,2}(?:&\d+|\S+)?")
     _SEPARATORS = frozenset(("&", "&&", "|", "||"))
     _CHAIN_CHARS = frozenset("&|")
+    _ESCAPE = "^"
+    _ESCAPED_LITERALS = frozenset("&|<>^")
     _OPERATIONS = {"add": Operation.ADD, "delete": Operation.DELETE}
     _UNVERIFIED_OPERATIONS = frozenset(
         ("query", "copy", "save", "restore", "load", "unload", "compare", "export", "import", "flags")
@@ -923,9 +929,16 @@ class RegistryCommandParser:
                 continue
             token: list[str] = []
             quoted = False
+            escaped = False
             while index < length:
                 char = line[index]
-                if char == "\\":
+                if not quoted and char == cls._ESCAPE and index + 1 < length:
+                    index += 1
+                    if line[index] in cls._ESCAPED_LITERALS:
+                        token.append(line[index])
+                        index += 1
+                        escaped = True
+                elif char == "\\":
                     slashes = 0
                     while index < length and line[index] == "\\":
                         slashes += 1
@@ -953,7 +966,8 @@ class RegistryCommandParser:
                 else:
                     token.append(char)
                     index += 1
-            tokens.append("".join(token))
+            joined = "".join(token)
+            tokens.append(_EscapedToken(joined) if escaped else joined)
         return tokens
 
     @classmethod
@@ -968,7 +982,7 @@ class RegistryCommandParser:
     def _split_commands(cls, tokens: list[str]) -> Iterable[list[str]]:
         command: list[str] = []
         for token in tokens:
-            if token in cls._SEPARATORS:
+            if token in cls._SEPARATORS and not isinstance(token, _EscapedToken):
                 if command:
                     yield command
                 command = []
@@ -1047,7 +1061,7 @@ class RegistryCommandParser:
                 all_values = True
             elif switch in ("/reg:32", "/reg:64"):
                 view = int(switch[-2:])
-            elif self._REDIRECT.fullmatch(token):
+            elif not isinstance(token, _EscapedToken) and self._REDIRECT.fullmatch(token):
                 if token.endswith(">"):
                     index += 1
             elif switch != "/f":
