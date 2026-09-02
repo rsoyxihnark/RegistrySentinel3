@@ -89,7 +89,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.1.5"
+APP_VERSION = "1.1.6"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -1241,6 +1241,7 @@ class RegistryInspector(_CancellableWorker):
         entries: Iterable[RegistryEntry],
         progress: Optional[Callable[[int], None]] = None,
     ) -> list[ScanResult]:
+        _hku_cache.clear()
         groups: dict[tuple[int, str, int], list[RegistryEntry]] = defaultdict(list)
         for entry in entries:
             groups[(entry.hive, entry.path.casefold(), _VIEW_INDEX[entry.view])].append(entry)
@@ -3365,6 +3366,7 @@ class RegistrySentinel(QMainWindow):
         self._entries = result.entries
         self._list_path = file_path
 
+        self._apply_summary = ""
         self._scan_completed = False
         self._update_action_states()
 
@@ -3866,6 +3868,7 @@ class RegistrySentinel(QMainWindow):
                 toggle.setChecked(True)
                 toggle.blockSignals(False)
             self._show_only_operations(DEFAULT_OPERATION_VISIBILITY)
+            self._settings_save_timer.start(SETTINGS_SAVE_DELAY_MS)
             self._last_filter_signature = None
             self._apply_filters()
             if self.table.isRowHidden(row):

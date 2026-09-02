@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.6
+
+- A scan now checks which user profiles are loaded each time it runs, so an `HKU` entry is no longer judged against the profiles that were loaded when the list was opened.
+- Loading a different list no longer leaves the result of the previous Apply sitting in the status line.
+- When Go to UID clears the `reg add` / `reg delete` filter to reveal a row, that filter is now remembered next time.
+
 ## 1.1.5
 
 - A `reg add` or `reg delete` that chains onto another command with no space around the `&`, `|` or `>` is now read normally, instead of being reported as a list error.
