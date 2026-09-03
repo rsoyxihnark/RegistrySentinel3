@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -154,6 +155,36 @@ class HiveRefreshTest(unittest.TestCase):
             inspector.scan(entries)
 
         self.assertEqual(len(enumerations), 2)
+
+
+class ApplyTargetTest(unittest.TestCase):
+    def groups(self, lines, ticked, visible):
+        entries = sentinel.RegistryCommandParser()._parse_stream(lines).entries
+        for entry in entries:
+            entry.compliant = False
+            entry.selected = entry.source_line in ticked
+        window = SimpleNamespace(
+            _entries=entries,
+            _visible_entry_set={e.unique_id for e in entries if e.source_line in visible},
+        )
+        found, chosen = sentinel.RegistrySentinel._noncompliant_groups(window)
+        return [e.source_line for e in found], [e.source_line for e in chosen]
+
+    LINES = (
+        r"reg add HKLM\Software\Foo /v A /t REG_SZ /d 1 /f",
+        r"reg add HKLM\Software\Foo /v B /t REG_SZ /d 2 /f",
+        r"reg add HKLM\Software\Foo /v C /t REG_SZ /d 3 /f",
+    )
+
+    def test_a_ticked_entry_the_filter_hides_is_not_applied(self):
+        found, chosen = self.groups(self.LINES, ticked={1, 2, 3}, visible={1})
+        self.assertEqual(found, [1])
+        self.assertEqual(chosen, [1])
+
+    def test_every_visible_ticked_entry_is_applied(self):
+        found, chosen = self.groups(self.LINES, ticked={1, 3}, visible={1, 2, 3})
+        self.assertEqual(found, [1, 2, 3])
+        self.assertEqual(chosen, [1, 3])
 
 
 if __name__ == "__main__":

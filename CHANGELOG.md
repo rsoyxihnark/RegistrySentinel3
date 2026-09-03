@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+- A `reg add` line that writes a `REG_NONE` value is now read and checked like any other, instead of being reported as a list error.
+- A list saved in the Windows ANSI encoding now keeps its own characters, so a value holding something like a curly quote is written the way it was typed.
+- Showing only `reg add` or only `reg delete` entries now brings the Type column into view, so the filter that hides the rest is plain to see on the next run.
+- Apply Selected now leaves alone any ticked entry the current filter hides, and says how many, so nothing is written that you cannot see.
+
 ## 1.1.8
 
 - A line holding a character such as `…` is now read as one command, instead of being split in two so that the value was written short and the rest of the line was ignored.

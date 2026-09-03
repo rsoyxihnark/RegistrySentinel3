@@ -89,7 +89,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.1.8"
+APP_VERSION = "1.2.0"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -188,6 +188,7 @@ class ValueType(Enum):
     QWORD = "REG_QWORD"
     BINARY = "REG_BINARY"
     MULTI_SZ = "REG_MULTI_SZ"
+    NONE = "REG_NONE"
     DELETE = "DELETE"
     RESET = "RESET"
     KEY = "KEY"
@@ -281,6 +282,7 @@ _WINREG_TYPE_MAP = {
     ValueType.QWORD: winreg.REG_QWORD,
     ValueType.BINARY: winreg.REG_BINARY,
     ValueType.MULTI_SZ: winreg.REG_MULTI_SZ,
+    ValueType.NONE: winreg.REG_NONE,
 }
 
 _REG_TYPE_NAMES = {code: vt.value for vt, code in _WINREG_TYPE_MAP.items()}
@@ -376,6 +378,8 @@ _INT_MASKS = {
     ValueType.DWORD: 0xFFFFFFFF,
     ValueType.QWORD: 0xFFFFFFFF_FFFFFFFF,
 }
+
+_RAW_BYTE_TYPES = frozenset((ValueType.BINARY, ValueType.NONE))
 
 _ENV_VAR_PATTERN = re.compile(r"%([^%\r\n]+)%")
 
@@ -888,7 +892,10 @@ class RegistryCommandParser:
             try:
                 text = raw.decode("utf-8-sig")
             except UnicodeDecodeError:
-                text = raw.decode("latin-1")
+                try:
+                    text = raw.decode("mbcs")
+                except UnicodeDecodeError:
+                    text = raw.decode("latin-1")
         result = self._parse_stream(text.split("\n"))
         logger.info("Loaded %d registry entries, %d lines skipped", len(result.entries), len(result.skipped_lines))
         return result
@@ -1197,7 +1204,7 @@ def _compare_expected(expected: str, actual: str, value_type: ValueType) -> bool
         expected_list = _split_multi_sz(expected)
         actual_list = _split_multi_sz(actual)
         return expected_list == actual_list
-    if value_type == ValueType.BINARY:
+    if value_type in _RAW_BYTE_TYPES:
         norm_expected = expected.replace(" ", "").lower()
         norm_actual = actual.replace(" ", "").lower()
         return norm_expected == norm_actual
@@ -1234,7 +1241,7 @@ def _prepare_value(data: str, value_type: ValueType) -> object:
         if not -(mask // 2) - 1 <= number <= mask:
             raise ValueError(f"{data} is out of range for {value_type.value}")
         return number & mask
-    if value_type == ValueType.BINARY:
+    if value_type in _RAW_BYTE_TYPES:
         return bytes.fromhex(data.replace(" ", ""))
     if value_type == ValueType.MULTI_SZ:
         return _split_multi_sz(data)
@@ -2723,7 +2730,7 @@ class RegistrySentinel(QMainWindow):
             ActionSpec(QStyle.StandardPixmap.SP_DialogOpenButton, "Browse List", self._choose_list_file, attr="_act_browse_list", role="primary", tooltip="Browse for a registry command list file"),
             ActionSpec(QStyle.StandardPixmap.SP_FileDialogInfoView, "View List", self._open_list_external, role="primary", tooltip="Open the current list file in the default editor"),
             ActionSpec(QStyle.StandardPixmap.SP_BrowserReload, "Run Scan", self._start_scan, attr="_act_run_scan", shortcut="F5", role="warning", tooltip="F5 · Scan all loaded entries against the current registry"),
-            ActionSpec(QStyle.StandardPixmap.SP_DialogApplyButton, "Apply Selected", lambda: self._start_apply(selected_only=True), attr="_act_apply_selected", role="success", tooltip="Apply registry fixes to selected non-compliant entries"),
+            ActionSpec(QStyle.StandardPixmap.SP_DialogApplyButton, "Apply Selected", lambda: self._start_apply(selected_only=True), attr="_act_apply_selected", role="success", tooltip="Apply registry fixes to visible non-compliant entries you have ticked"),
             ActionSpec(QStyle.StandardPixmap.SP_MediaPlay, "Apply All", lambda: self._start_apply(selected_only=False), attr="_act_apply_all", role="success", tooltip="Apply registry fixes to all visible non-compliant entries"),
             ActionSpec(QStyle.StandardPixmap.SP_DesktopIcon, "Reset View", self._reset_view),
             ActionSpec(QStyle.StandardPixmap.SP_FileDialogDetailedView, "View Log", self._view_log),
@@ -3581,10 +3588,11 @@ class RegistrySentinel(QMainWindow):
         for e in self._entries:
             if e.compliant is not False or e.list_error or e.access_denied:
                 continue
+            if e.unique_id not in self._visible_entry_set:
+                continue
             if e.selected:
                 selected.append(e)
-            if e.unique_id in self._visible_entry_set:
-                noncompliant.append(e)
+            noncompliant.append(e)
         return noncompliant, selected
 
     @property
@@ -3753,6 +3761,7 @@ class RegistrySentinel(QMainWindow):
         label = self.HEADERS[TYPE_COLUMN]
         tooltip = TYPE_HEADER_TOOLTIP
         if hidden:
+            self.table.setColumnHidden(TYPE_COLUMN, False)
             shown = next(
                 (operation for operation, visible in self._operation_visibility.items() if visible),
                 None,
@@ -4186,6 +4195,17 @@ class RegistrySentinel(QMainWindow):
         )
         blocked = self._list_error_count
         notes: list[str] = []
+        if selected_only:
+            out_of_view = sum(
+                1
+                for entry in self._entries
+                if entry.selected and entry.unique_id not in self._visible_entry_set
+            )
+            if out_of_view:
+                notes.append(
+                    f"{out_of_view} ticked entry(s) are hidden by the current filter and are "
+                    "left alone."
+                )
         if blocked:
             notes.append(
                 f"{blocked} entry(s) with a LIST ERROR are excluded: bad syntax, lines that "

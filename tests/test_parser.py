@@ -106,9 +106,44 @@ class ListFileTest(unittest.TestCase):
                 text = "\r\n".join(self.LINES).format(filler)
                 self.check_one_command_per_line(text, "latin-1" if filler < "\u0100" else "utf-8")
 
+    def test_a_windows_ansi_list_keeps_its_own_characters(self):
+        text = "\r\n".join(self.LINES).format("\u2019")
+        try:
+            data = text.encode("mbcs")
+        except (UnicodeEncodeError, LookupError):
+            self.skipTest("this system code page cannot hold the test text")
+        result = self.parse_bytes(data)
+        self.assertEqual(result.entries[0].expected, "Loading\u2019")
+
     def test_a_windows_ansi_list_keeps_each_command_whole(self):
         text = "\r\n".join(self.LINES).format("\u2026")
         self.check_one_command_per_line(text, "cp1252")
+
+
+class RegNoneTest(unittest.TestCase):
+    def only(self, line):
+        entries = sentinel.RegistryCommandParser()._parse_stream([line]).entries
+        self.assertEqual(len(entries), 1)
+        return entries[0]
+
+    def test_reg_none_is_read_as_raw_bytes(self):
+        entry = self.only(r"reg add HKLM\Software\Foo /v A /t REG_NONE /d 0102ff /f")
+        self.assertFalse(entry.syntax_error)
+        self.assertIs(entry.value_type, sentinel.ValueType.NONE)
+        self.assertEqual(entry.expected, "0102ff")
+        self.assertEqual(sentinel._prepare_value(entry.expected, entry.value_type), b"\x01\x02\xff")
+
+    def test_reg_none_without_data_is_empty(self):
+        entry = self.only(r"reg add HKLM\Software\Foo /v A /t REG_NONE /f")
+        self.assertEqual(entry.expected, "")
+        self.assertEqual(sentinel._prepare_value(entry.expected, entry.value_type), b"")
+
+    def test_reg_none_that_is_not_hex_is_a_list_error(self):
+        self.assertTrue(self.only(r"reg add HKLM\Software\Foo /v A /t REG_NONE /d zz /f").syntax_error)
+
+    def test_reg_none_compares_like_binary(self):
+        self.assertTrue(sentinel._compare_expected("0102FF", "0102ff", sentinel.ValueType.NONE))
+        self.assertFalse(sentinel._compare_expected("0102", "0102ff", sentinel.ValueType.NONE))
 
 
 class ListErrorTest(unittest.TestCase):
