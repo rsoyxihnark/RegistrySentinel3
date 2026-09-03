@@ -89,7 +89,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.1.7"
+APP_VERSION = "1.1.8"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -889,7 +889,7 @@ class RegistryCommandParser:
                 text = raw.decode("utf-8-sig")
             except UnicodeDecodeError:
                 text = raw.decode("latin-1")
-        result = self._parse_stream(text.splitlines())
+        result = self._parse_stream(text.split("\n"))
         logger.info("Loaded %d registry entries, %d lines skipped", len(result.entries), len(result.skipped_lines))
         return result
 

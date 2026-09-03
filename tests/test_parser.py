@@ -1,4 +1,5 @@
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -77,6 +78,37 @@ class ParseTest(unittest.TestCase):
         for tail in ("^& echo hi", "^> out.txt", "2^>&1"):
             entry = self.only(rf"reg add HKLM\Software\Foo /v A /d 1 /f {tail}")
             self.assertTrue(entry.syntax_error, tail)
+
+
+class ListFileTest(unittest.TestCase):
+    LINES = (
+        r'reg add HKLM\Software\Foo /v A /t REG_SZ /d "Loading{0}" /f',
+        r"reg add HKLM\Software\Foo /v B /t REG_SZ /d 2 /f",
+    )
+
+    def parse_bytes(self, data):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "List.txt"
+            path.write_bytes(data)
+            return sentinel.RegistryCommandParser().parse_file(path)
+
+    def check_one_command_per_line(self, text, encoding):
+        result = self.parse_bytes(text.encode(encoding))
+        self.assertEqual(result.skipped_lines, [])
+        self.assertEqual([e.value_name for e in result.entries], ["A", "B"])
+        self.assertEqual([e.source_line for e in result.entries], [1, 2])
+        self.assertFalse(any(e.syntax_error for e in result.entries))
+        self.assertEqual(len(result.entries[0].expected), len("Loading") + 1)
+
+    def test_a_line_holding_an_unusual_character_is_not_split(self):
+        for filler in ("\u0085", "\u000c", "\u000b", "\u2028"):
+            with self.subTest(filler=filler):
+                text = "\r\n".join(self.LINES).format(filler)
+                self.check_one_command_per_line(text, "latin-1" if filler < "\u0100" else "utf-8")
+
+    def test_a_windows_ansi_list_keeps_each_command_whole(self):
+        text = "\r\n".join(self.LINES).format("\u2026")
+        self.check_one_command_per_line(text, "cp1252")
 
 
 class ListErrorTest(unittest.TestCase):

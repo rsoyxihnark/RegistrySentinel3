@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.8
+
+- A line holding a character such as `…` is now read as one command, instead of being split in two so that the value was written short and the rest of the line was ignored.
+
 ## 1.1.7
 
 - A caret now escapes the character after it, so a `&`, `|` or `>` written as `^&`, `^|` or `^>` reaches the value as data instead of cutting the line short.
