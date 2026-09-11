@@ -89,7 +89,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -252,6 +252,7 @@ VIRTUALSTORE_MACHINE_SUFFIX = "MACHINE"
 VIRTUALSTORE_CLASSES_SUFFIX = "CLASSES"
 VIRTUALSTORE_MACHINE_PREFIX = f"{VIRTUALSTORE_PREFIX}\\{VIRTUALSTORE_MACHINE_SUFFIX}"
 VIRTUALSTORE_CLASSES_PREFIX = f"{VIRTUALSTORE_PREFIX}\\{VIRTUALSTORE_CLASSES_SUFFIX}"
+VIRTUALSTORE_LABEL = "VirtualStore"
 VIRTUAL_PREFIX_MAP = {
     winreg.HKEY_LOCAL_MACHINE: VIRTUALSTORE_MACHINE_PREFIX,
     winreg.HKEY_CLASSES_ROOT: VIRTUALSTORE_CLASSES_PREFIX,
@@ -684,8 +685,9 @@ def _annotate_results(results: list[ScanResult], source: Optional[str]) -> None:
     if not source or source == DEFAULT_VIEW_LABEL:
         return
     suffix = f" [{source}]"
+    tag_compliant = source == VIRTUALSTORE_LABEL
     for result in results:
-        if result.compliant is True:
+        if result.compliant is True and not tag_compliant:
             continue
         tag = suffix.upper() if result.type_mismatch else suffix
         if tag not in result.detail:
@@ -1312,7 +1314,7 @@ class RegistryInspector(_CancellableWorker):
 
         virt_handle = _open_virtual_store_key(hive, path, winreg.KEY_READ)
         if virt_handle:
-            return self._scan_with_handle(entries, virt_handle, "VirtualStore", winreg.KEY_READ)
+            return self._scan_with_handle(entries, virt_handle, VIRTUALSTORE_LABEL, winreg.KEY_READ)
 
         missing_root = _hive_root_missing(hive, path)
         if missing_root:

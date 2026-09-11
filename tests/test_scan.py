@@ -135,6 +135,35 @@ class ResetScanTest(unittest.TestCase):
         self.assertIn("Stray", result.detail)
 
 
+class VirtualStoreScanTest(unittest.TestCase):
+    LINE = r"reg add HKLM\Software\Foo /v A /t REG_SZ /d 1 /f"
+
+    def scan(self, opened, virtual=None):
+        entries = sentinel.RegistryCommandParser()._parse_stream([self.LINE]).entries
+        with mock.patch.object(sentinel, "_open_key_in_view", lambda *a: opened), \
+                mock.patch.object(sentinel, "_open_virtual_store_key", lambda *a: virtual), \
+                mock.patch.object(sentinel.winreg, "QueryValueEx", query_value):
+            return sentinel.RegistryInspector().scan(entries)[0]
+
+    def test_a_compliant_value_found_in_the_virtualstore_says_so(self):
+        missing = sentinel.OpenKeyResult(None, None, None, 0)
+        result = self.scan(missing, FakeKey({"A": "1"}))
+        self.assertIs(result.compliant, True)
+        self.assertIn(sentinel.VIRTUALSTORE_LABEL, result.detail)
+
+    def test_a_non_compliant_value_in_the_virtualstore_still_says_so(self):
+        missing = sentinel.OpenKeyResult(None, None, None, 0)
+        result = self.scan(missing, FakeKey({"A": "2"}))
+        self.assertIs(result.compliant, False)
+        self.assertIn(sentinel.VIRTUALSTORE_LABEL, result.detail)
+
+    def test_a_value_found_where_the_list_points_is_not_tagged(self):
+        found = sentinel.OpenKeyResult(FakeKey({"A": "1"}), sentinel.DEFAULT_VIEW_LABEL, None, 0)
+        result = self.scan(found)
+        self.assertIs(result.compliant, True)
+        self.assertEqual(result.detail, "Compliant")
+
+
 class HiveRefreshTest(unittest.TestCase):
     def test_each_scan_reads_the_loaded_user_hives_again(self):
         entries = sentinel.RegistryCommandParser()._parse_stream(

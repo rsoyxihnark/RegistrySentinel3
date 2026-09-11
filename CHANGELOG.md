@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+
+- A compliant entry whose value was found in the VirtualStore now says so, instead of looking as though the value sits in the key the list names.
+
 ## 1.2.0
 
 - A `reg add` line that writes a `REG_NONE` value is now read and checked like any other, instead of being reported as a list error.
