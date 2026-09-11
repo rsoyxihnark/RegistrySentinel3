@@ -30,6 +30,12 @@ class ParseTest(unittest.TestCase):
             self.assertFalse(entry.syntax_error, tail)
             self.assertEqual(entry.value_name, "A")
 
+    def test_empty_quoted_data_followed_by_a_chain_stays_empty(self):
+        for tail in ("&echo ok", "&&echo ok", "|more", ">nul"):
+            entry = self.only(rf'reg add HKLM\Software\Foo /v A /t REG_SZ /d ""{tail}')
+            self.assertFalse(entry.syntax_error, tail)
+            self.assertEqual(entry.expected, "", tail)
+
     def test_two_commands_on_one_line_both_parse(self):
         entries = self.parse(
             r"reg add HKLM\Software\Foo /v A /d 1 /f & reg delete HKLM\Software\Foo /v B /f"

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.3
+
+- A `reg add` whose data is an empty pair of quotes with `&`, `|` or `>` straight after it now writes an empty value, instead of writing the rest of the line into the registry or reporting the line as a list error.
+- Apply Selected no longer warns that ticked entries are hidden when those entries have nothing left to fix.
+
 ## 1.2.2
 
 - Registry Sentinel now carries its version number, so File Explorer shows it in the File version column and it appears on the file's Properties page.

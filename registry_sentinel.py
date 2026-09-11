@@ -89,7 +89,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.2.2"
+APP_VERSION = "1.2.3"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -470,6 +470,10 @@ class RegistryEntry:
     @property
     def is_reset(self) -> bool:
         return self.reset_plan is not None
+
+    @property
+    def fixable(self) -> bool:
+        return self.compliant is False and not self.list_error and not self.access_denied
 
     @property
     def registry_path(self) -> str:
@@ -937,6 +941,7 @@ class RegistryCommandParser:
                 tokens.append(line[start:index])
                 continue
             token: list[str] = []
+            token_start = index
             quoted = False
             escaped = False
             while index < length:
@@ -970,7 +975,7 @@ class RegistryCommandParser:
                         quoted = not quoted
                 elif not quoted and char in " \t":
                     break
-                elif not quoted and cls._starts_new_token(token, char):
+                elif not quoted and index > token_start and cls._starts_new_token(token, char):
                     break
                 else:
                     token.append(char)
@@ -981,7 +986,7 @@ class RegistryCommandParser:
 
     @classmethod
     def _starts_new_token(cls, token: list[str], char: str) -> bool:
-        if not token or token[-1].endswith(">"):
+        if token and token[-1].endswith(">"):
             return False
         if char in cls._CHAIN_CHARS:
             return True
@@ -3588,9 +3593,7 @@ class RegistrySentinel(QMainWindow):
         noncompliant: list[RegistryEntry] = []
         selected: list[RegistryEntry] = []
         for e in self._entries:
-            if e.compliant is not False or e.list_error or e.access_denied:
-                continue
-            if e.unique_id not in self._visible_entry_set:
+            if not e.fixable or e.unique_id not in self._visible_entry_set:
                 continue
             if e.selected:
                 selected.append(e)
@@ -4201,7 +4204,9 @@ class RegistrySentinel(QMainWindow):
             out_of_view = sum(
                 1
                 for entry in self._entries
-                if entry.selected and entry.unique_id not in self._visible_entry_set
+                if entry.selected
+                and entry.fixable
+                and entry.unique_id not in self._visible_entry_set
             )
             if out_of_view:
                 notes.append(

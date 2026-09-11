@@ -186,11 +186,31 @@ class HiveRefreshTest(unittest.TestCase):
         self.assertEqual(len(enumerations), 2)
 
 
+class FixableEntryTest(unittest.TestCase):
+    def entry(self, compliant):
+        entry = sentinel.RegistryCommandParser()._parse_stream(
+            [r"reg add HKLM\Software\Foo /v A /t REG_SZ /d 1 /f"]
+        ).entries[0]
+        entry.compliant = compliant
+        return entry
+
+    def test_only_a_scanned_non_compliant_entry_is_a_fix(self):
+        self.assertTrue(self.entry(False).fixable)
+        for compliant in (True, None):
+            self.assertFalse(self.entry(compliant).fixable, compliant)
+
+    def test_an_entry_that_cannot_be_written_is_not_a_fix(self):
+        for flag in ("syntax_error", "conflict", "type_mismatch", "access_denied"):
+            entry = self.entry(False)
+            setattr(entry, flag, True)
+            self.assertFalse(entry.fixable, flag)
+
+
 class ApplyTargetTest(unittest.TestCase):
-    def groups(self, lines, ticked, visible):
+    def groups(self, lines, ticked, visible, compliance=None):
         entries = sentinel.RegistryCommandParser()._parse_stream(lines).entries
         for entry in entries:
-            entry.compliant = False
+            entry.compliant = (compliance or {}).get(entry.source_line, False)
             entry.selected = entry.source_line in ticked
         window = SimpleNamespace(
             _entries=entries,
@@ -214,6 +234,13 @@ class ApplyTargetTest(unittest.TestCase):
         found, chosen = self.groups(self.LINES, ticked={1, 3}, visible={1, 2, 3})
         self.assertEqual(found, [1, 2, 3])
         self.assertEqual(chosen, [1, 3])
+
+    def test_a_ticked_entry_with_nothing_left_to_fix_is_not_applied(self):
+        found, chosen = self.groups(
+            self.LINES, ticked={1, 2, 3}, visible={1, 2, 3}, compliance={1: True, 2: None}
+        )
+        self.assertEqual(found, [3])
+        self.assertEqual(chosen, [3])
 
 
 if __name__ == "__main__":
