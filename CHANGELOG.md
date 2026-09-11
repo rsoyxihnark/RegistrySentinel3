@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.2
+
+- Registry Sentinel now carries its version number, so File Explorer shows it in the File version column and it appears on the file's Properties page.
+
 ## 1.2.1
 
 - A compliant entry whose value was found in the VirtualStore now says so, instead of looking as though the value sits in the key the list names.

@@ -154,14 +154,63 @@ jobs:
       - name: Run tests
         run: python -m unittest discover -s tests
 
+      - name: Write the version resource
+        shell: python
+        env:
+          APP_VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          import os
+          from pathlib import Path
+
+          version = os.environ["APP_VERSION"]
+          quad = tuple(([int(part) for part in version.split(".")] + [0, 0, 0, 0])[:4])
+
+          Path("version_info.txt").write_text(f"""VSVersionInfo(
+            ffi=FixedFileInfo(
+              filevers={quad},
+              prodvers={quad},
+              mask=0x3f,
+              flags=0x0,
+              OS=0x40004,
+              fileType=0x1,
+              subtype=0x0,
+              date=(0, 0)
+            ),
+            kids=[
+              StringFileInfo([
+                StringTable('040904B0', [
+                  StringStruct('CompanyName', 'ClementineDev'),
+                  StringStruct('FileDescription', 'Registry Sentinel'),
+                  StringStruct('FileVersion', '{version}'),
+                  StringStruct('InternalName', 'RegistrySentinel'),
+                  StringStruct('OriginalFilename', 'RegistrySentinel.exe'),
+                  StringStruct('ProductName', 'Registry Sentinel'),
+                  StringStruct('ProductVersion', '{version}')])
+              ]),
+              VarFileInfo([VarStruct('Translation', [1033, 1200])])
+            ]
+          )
+          """, encoding="utf-8")
+
       - name: Build Registry Sentinel
         run: >
           pyinstaller --noconfirm --onefile --windowed
+          --version-file version_info.txt
           --name RegistrySentinel registry_sentinel.py
 
-      - name: Check the build produced an executable
-        shell: bash
-        run: test -s dist/RegistrySentinel.exe
+      - name: Check the build produced an executable carrying its version
+        shell: pwsh
+        run: |
+          $exe = "dist\RegistrySentinel.exe"
+          if (-not (Test-Path $exe) -or (Get-Item $exe).Length -eq 0) {
+            throw "$exe is missing or empty"
+          }
+          $expected = "${{ needs.gate.outputs.version }}"
+          $found = (Get-Item $exe).VersionInfo.FileVersion
+          if ($found -ne $expected) {
+            throw "The executable reports file version '$found' but the source carries '$expected'"
+          }
+          Write-Host "Built $exe reporting file version $found"
 
       - uses: actions/upload-artifact@v7
         with:
