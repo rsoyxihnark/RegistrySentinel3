@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.4
+
+- A scan of a reset key that names a great many subkeys no longer ties up Windows resources while it runs.
+- The messages and warnings Registry Sentinel shows are now let go of once you close them, instead of being kept for as long as the program is running.
+
 ## 1.2.3
 
 - A `reg add` whose data is an empty pair of quotes with `&`, `|` or `>` straight after it now writes an empty value, instead of writing the rest of the line into the registry or reporting the line as a list error.

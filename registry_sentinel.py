@@ -89,7 +89,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.2.3"
+APP_VERSION = "1.2.4"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
