@@ -80,8 +80,11 @@ def query_value(handle, name):
     return (handle.values[name], sentinel.winreg.REG_SZ)
 
 
-def open_child(handle, name, reserved, access):
-    return handle.subkeys[name]
+def open_child(handle, path, reserved, access):
+    node = handle
+    for part in path.split("\\"):
+        node = node.subkeys[part]
+    return node
 
 
 class ResetScanTest(unittest.TestCase):
@@ -91,8 +94,18 @@ class ResetScanTest(unittest.TestCase):
         r"reg add HKLM\Software\Demo\Sub /v Inner /t REG_SZ /d 2 /f",
     )
 
-    def scan_against(self, root):
-        entries = sentinel.RegistryCommandParser()._parse_stream(self.LINES).entries
+    DEEP_LINES = (
+        r"reg delete HKLM\Software\Demo /f",
+        r"reg add HKLM\Software\Demo\Sub\Deeper /v Inner /t REG_SZ /d 1 /f",
+    )
+
+    ALL_VALUES_LINES = (
+        r"reg delete HKLM\Software\Demo /va /f",
+        r"reg add HKLM\Software\Demo /v Keep /t REG_SZ /d 1 /f",
+    )
+
+    def scan_against(self, root, lines=None):
+        entries = sentinel.RegistryCommandParser()._parse_stream(lines or self.LINES).entries
 
         def open_at(hive, path, access, label):
             node = root
@@ -131,6 +144,26 @@ class ResetScanTest(unittest.TestCase):
     def test_reset_is_not_compliant_with_an_unlisted_value_in_a_listed_subkey(self):
         root = FakeKey({"Keep": "1"}, {"Sub": FakeKey({"Inner": "2", "Stray": "x"})})
         result = self.scan_against(root)[1]
+        self.assertIs(result.compliant, False)
+        self.assertIn("Stray", result.detail)
+
+    def test_reset_reads_a_listed_subkey_two_levels_down(self):
+        root = FakeKey({}, {"Sub": FakeKey({}, {"Deeper": FakeKey({"Inner": "1"})})})
+        self.assertIs(self.scan_against(root, self.DEEP_LINES)[1].compliant, True)
+
+    def test_reset_is_not_compliant_with_an_unlisted_value_two_levels_down(self):
+        root = FakeKey({}, {"Sub": FakeKey({}, {"Deeper": FakeKey({"Inner": "1", "Stray": "x"})})})
+        result = self.scan_against(root, self.DEEP_LINES)[1]
+        self.assertIs(result.compliant, False)
+        self.assertIn("Sub\\Deeper\\Stray", result.detail)
+
+    def test_deleting_all_values_ignores_what_the_subkeys_hold(self):
+        root = FakeKey({"Keep": "1"}, {"Sub": FakeKey({"Anything": "x"})})
+        self.assertIs(self.scan_against(root, self.ALL_VALUES_LINES)[1].compliant, True)
+
+    def test_deleting_all_values_is_not_compliant_with_an_unlisted_value(self):
+        root = FakeKey({"Keep": "1", "Stray": "x"})
+        result = self.scan_against(root, self.ALL_VALUES_LINES)[1]
         self.assertIs(result.compliant, False)
         self.assertIn("Stray", result.detail)
 

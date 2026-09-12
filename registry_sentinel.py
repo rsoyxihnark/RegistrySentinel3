@@ -1462,11 +1462,18 @@ class RegistryInspector(_CancellableWorker):
     ) -> tuple[list[str], bool]:
         extras: list[str] = []
         inspected = 0
-        pending: list[tuple[Any, str, str]] = [(root_handle, "", "")]
-        opened: list[Any] = []
-        try:
-            while pending:
-                handle, relative, shown = pending.pop()
+        pending: list[tuple[str, str]] = [("", "")]
+        while pending:
+            relative, shown = pending.pop()
+            if shown:
+                try:
+                    handle = winreg.OpenKey(root_handle, shown, 0, access)
+                except OSError as exc:
+                    logger.info("Reset scan could not open %s: %s", relative, exc)
+                    continue
+            else:
+                handle = root_handle
+            try:
                 allowed = plan.values.get(relative, frozenset())
                 for name in _enumerate_names(handle, winreg.EnumValue):
                     inspected += 1
@@ -1482,17 +1489,11 @@ class RegistryInspector(_CancellableWorker):
                         if len(extras) >= RESET_EXTRA_LIMIT or inspected >= RESET_MAX_NODES:
                             return extras, True
                         continue
-                    try:
-                        child_handle = winreg.OpenKey(handle, sub_key, 0, access)
-                    except OSError as exc:
-                        logger.info("Reset scan could not open %s: %s", child, exc)
-                        continue
-                    opened.append(child_handle)
-                    pending.append((child_handle, child, _join_sub_path(shown, sub_key)))
-        finally:
-            for handle in opened:
-                with suppress(OSError):
-                    handle.Close()
+                    pending.append((child, _join_sub_path(shown, sub_key)))
+            finally:
+                if handle is not root_handle:
+                    with suppress(OSError):
+                        handle.Close()
         return extras, False
 
     @staticmethod
@@ -3952,6 +3953,7 @@ class RegistrySentinel(QMainWindow):
         dialog.setWindowTitle(title)
         dialog.setText(text)
         dialog.exec()
+        dialog.deleteLater()
 
     def _open_external_path(
         self,
@@ -4241,7 +4243,9 @@ class RegistrySentinel(QMainWindow):
             proceed = confirm.addButton("Apply Remaining", QMessageBox.ButtonRole.AcceptRole)
             confirm.addButton(QMessageBox.StandardButton.Cancel)
             confirm.exec()
-            if confirm.clickedButton() is not proceed:
+            accepted = confirm.clickedButton() is proceed
+            confirm.deleteLater()
+            if not accepted:
                 return
 
         self._apply_worker = self._launch_worker(
