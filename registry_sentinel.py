@@ -89,7 +89,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.2.4"
+APP_VERSION = "1.2.5"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -387,6 +387,72 @@ _ENV_VAR_PATTERN = re.compile(r"%([^%\r\n]+)%")
 
 def _expand_env_vars(text: str) -> str:
     return _ENV_VAR_PATTERN.sub(lambda match: os.environ.get(match.group(1), match.group(0)), text)
+
+
+_BATCH_ARGUMENT = re.compile(r"\*|[0-9]|~[fdpnxsatz]*(?:\$[^%:]*:)?[0-9]", re.IGNORECASE)
+_BATCH_SUBSTRING = re.compile(r"~(-?[0-9]+)?(,(-?[0-9]+)?)?")
+
+
+def _modify_batch_value(value: str, modifier: str) -> Optional[str]:
+    substring = _BATCH_SUBSTRING.fullmatch(modifier)
+    if substring:
+        start, comma, length = substring.groups()
+        begin = int(start or 0)
+        if begin < 0:
+            begin = max(len(value) + begin, 0)
+        if not comma:
+            return value[begin:]
+        count = int(length or 0)
+        end = len(value) + count if count < 0 else begin + count
+        return value[begin:end] if end > begin else ""
+    search, equals, replacement = modifier.partition("=")
+    pattern = search[1:] if search.startswith("*") else search
+    if not equals or not pattern:
+        return None
+    if search.startswith("*"):
+        found = re.search(re.escape(pattern), value, re.IGNORECASE)
+        return replacement + value[found.end():] if found else value
+    return re.sub(re.escape(pattern), lambda _: replacement, value, flags=re.IGNORECASE)
+
+
+def _expand_batch_percents(line: str) -> str:
+    parts: list[str] = []
+    index = 0
+    while True:
+        start = line.find("%", index)
+        if start < 0:
+            parts.append(line[index:])
+            return "".join(parts)
+        parts.append(line[index:start])
+        index = start + 1
+        if line.startswith("%", index):
+            parts.append("%")
+            index += 1
+            continue
+        argument = _BATCH_ARGUMENT.match(line, index)
+        if argument:
+            if argument.group().endswith("0"):
+                parts.append(line[start:argument.end()])
+            index = argument.end()
+            continue
+        stops = [found for found in (line.find("%", index), line.find(":", index)) if found >= 0]
+        if not stops:
+            continue
+        stop = min(stops)
+        value = os.environ.get(line[index:stop]) if stop > index else None
+        if line[stop] == "%":
+            parts.append(value or "")
+            index = stop + 1
+            continue
+        close = line.find("%", stop + 1)
+        modified = None
+        if value is not None and close >= 0:
+            modified = _modify_batch_value(value, line[stop + 1:close])
+        if modified is None:
+            index = stop + 1
+            continue
+        parts.append(modified)
+        index = close + 1
 
 
 def _format_reg_int_display(text: str, value_type: ValueType) -> str:
@@ -1007,7 +1073,7 @@ class RegistryCommandParser:
 
     def _parse_line(self, line: str, line_number: int) -> list[RegistryEntry]:
         entries: list[RegistryEntry] = []
-        for tokens in self._split_commands(self._tokenize(line)):
+        for tokens in self._split_commands(self._tokenize(_expand_batch_percents(line))):
             if tokens[0].rsplit("\\", 1)[-1].casefold() not in self._COMMAND_NAMES:
                 continue
             try:
@@ -1019,8 +1085,7 @@ class RegistryCommandParser:
 
     @staticmethod
     def _resolve_key(raw_path: str) -> tuple[int, str, str]:
-        expanded = _expand_env_vars(raw_path).rstrip("\\")
-        hive_name, _, sub_path = expanded.partition("\\")
+        hive_name, _, sub_path = raw_path.rstrip("\\").partition("\\")
         return HIVE_NAMES.get(hive_name.upper(), 0), sub_path, hive_name
 
     def _parse_reg_command(

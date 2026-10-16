@@ -197,6 +197,25 @@ class VirtualStoreScanTest(unittest.TestCase):
         self.assertEqual(result.detail, "Compliant")
 
 
+class PercentScanTest(unittest.TestCase):
+    LINE = r'reg add HKCU\Software\Foo /v A /t REG_SZ /d "https://google.com/search?q=%s" /f'
+
+    def scan(self, stored):
+        entries = sentinel.RegistryCommandParser()._parse_stream([self.LINE]).entries
+        found = sentinel.OpenKeyResult(FakeKey({"A": stored}), sentinel.DEFAULT_VIEW_LABEL, None, 0)
+        with mock.patch.object(sentinel, "_open_key_in_view", lambda *a: found), \
+                mock.patch.object(sentinel.winreg, "QueryValueEx", query_value):
+            return sentinel.RegistryInspector().scan(entries)[0]
+
+    def test_the_value_a_batch_file_writes_is_compliant(self):
+        result = self.scan("https://google.com/search?q=s")
+        self.assertIs(result.compliant, True)
+        self.assertEqual(result.detail, "Compliant")
+
+    def test_a_value_the_list_does_not_write_is_not_compliant(self):
+        self.assertIs(self.scan("https://google.com/search?q=%s").compliant, False)
+
+
 class HiveRefreshTest(unittest.TestCase):
     def test_each_scan_reads_the_loaded_user_hives_again(self):
         entries = sentinel.RegistryCommandParser()._parse_stream(

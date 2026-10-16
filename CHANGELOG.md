@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.5
+
+- A lone `%` in a list line is now dropped the way a batch file drops it, so `search?q=%s` is no longer reported as wrong when the registry holds `search?q=s`.
+- A `%%` in a list line is now read as one `%`, so a scan expects one `%` and Apply writes one, the same as a batch file.
+- A variable such as `%USERPROFILE%` in a list line is now replaced by its value, and one that is not set is left out, the same as in a batch file.
+- A `%1` to `%9` or `%*` in a list line is now left out, the same as in a batch file run without arguments.
+
 ## 1.2.4
 
 - A scan of a reset key that names a great many subkeys no longer ties up Windows resources while it runs.

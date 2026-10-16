@@ -1,7 +1,9 @@
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -84,6 +86,72 @@ class ParseTest(unittest.TestCase):
         for tail in ("^& echo hi", "^> out.txt", "2^>&1"):
             entry = self.only(rf"reg add HKLM\Software\Foo /v A /d 1 /f {tail}")
             self.assertTrue(entry.syntax_error, tail)
+
+
+class PercentTest(unittest.TestCase):
+    def data(self, text, value_type="REG_SZ"):
+        line = rf'reg add HKLM\Software\Foo /v A /t {value_type} /d "{text}" /f'
+        entries = sentinel.RegistryCommandParser()._parse_stream([line]).entries
+        self.assertEqual(len(entries), 1)
+        self.assertFalse(entries[0].syntax_error, text)
+        self.assertEqual(entries[0].raw_command, line)
+        return entries[0].expected
+
+    def setUp(self):
+        patcher = mock.patch.dict(os.environ, {"RS_TEST_SET": "abcdef"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        os.environ.pop("RS_TEST_UNSET", None)
+
+    def test_a_lone_percent_is_dropped_the_way_a_batch_file_drops_it(self):
+        line = (
+            r'reg add "HKEY_CURRENT_USER\SOFTWARE\Policies\Microsoft\Edge" /v "ManagedSearchEngines" '
+            r'/t REG_SZ /d "[{"allow_search_engine_discovery": false}, {"is_default": true, '
+            r'"keyword": "Google.com", "name": "Google", "search_url": "https://google.com/search?q=%s"}]" /f'
+        )
+        entries = sentinel.RegistryCommandParser()._parse_stream([line]).entries
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].raw_command, line)
+        self.assertEqual(
+            entries[0].expected,
+            "[{allow_search_engine_discovery: false}, {is_default: true, keyword: Google.com, "
+            "name: Google, search_url: https://google.com/search?q=s}]",
+        )
+
+    def test_a_doubled_percent_is_one_percent(self):
+        self.assertEqual(self.data("q=%%s"), "q=%s")
+        self.assertEqual(self.data("50%% off"), "50% off")
+        self.assertEqual(self.data("100%"), "100")
+
+    def test_a_variable_is_replaced_by_its_value(self):
+        self.assertEqual(self.data(r"%RS_TEST_SET%\x"), r"abcdef\x")
+        self.assertEqual(self.data(r"a%RS_TEST_UNSET%b"), "ab")
+
+    def test_a_batch_argument_is_empty(self):
+        self.assertEqual(self.data("a%1b"), "ab")
+        self.assertEqual(self.data("a%*b"), "ab")
+        self.assertEqual(self.data("a%20b"), "a0b")
+        self.assertEqual(self.data("a%~1b"), "ab")
+
+    def test_an_unset_variable_before_a_colon_is_dropped_up_to_the_colon(self):
+        self.assertEqual(self.data("a%b:c"), "ac")
+
+    def test_a_variable_substring_and_replacement_are_applied(self):
+        self.assertEqual(self.data("%RS_TEST_SET:~1,3%"), "bcd")
+        self.assertEqual(self.data("%RS_TEST_SET:~-2%"), "ef")
+        self.assertEqual(self.data("%RS_TEST_SET:~0,-2%"), "abcd")
+        self.assertEqual(self.data("%RS_TEST_SET:CD=x%"), "abxef")
+        self.assertEqual(self.data("%RS_TEST_SET:*c=-%"), "-def")
+
+    def test_an_expandable_string_keeps_the_variable_a_doubled_percent_protects(self):
+        self.assertEqual(self.data(r"%%SystemRoot%%\x", "REG_EXPAND_SZ"), r"%SystemRoot%\x")
+
+    def test_a_key_path_is_expanded_once(self):
+        parse = sentinel.RegistryCommandParser()._parse_stream
+        entry = parse([r"reg add HKLM\Software\%RS_TEST_SET% /v A /d 1 /f"]).entries[0]
+        self.assertEqual(entry.path, r"Software\abcdef")
+        entry = parse([r"reg add HKLM\Software\%%RS_TEST_SET%% /v A /d 1 /f"]).entries[0]
+        self.assertEqual(entry.path, r"Software\%RS_TEST_SET%")
 
 
 class ListFileTest(unittest.TestCase):
