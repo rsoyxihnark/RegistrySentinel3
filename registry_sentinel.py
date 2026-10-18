@@ -90,7 +90,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -1932,19 +1932,6 @@ SUPPORTED_LIST_PATTERN = " ".join(f"*{ext}" for ext in sorted(SUPPORTED_LIST_EXT
 SUPPORTED_LIST_FILTER = f"Registry lists ({SUPPORTED_LIST_PATTERN});;All files (*.*)"
 DEFAULT_LIST_BASENAME = "List"
 
-HELP_TEXT = (
-    "<b>Registry Sentinel</b><br><br>"
-    "1. Load a registry command list (List.txt).<br>"
-    "2. Click <b>Scan</b> to evaluate compliance.<br>"
-    "3. Tick entries to fix, then choose <b>Apply Selected</b>.<br>"
-    "4. Export a CSV report, or jump to a key in Regedit from the row context menu.<br><br>"
-    "A <b>reg delete</b> of a key followed by <b>reg add</b> lines for that same key is read as a "
-    "<b>RESET</b>: it is compliant while the key holds nothing but the values the list adds, and "
-    "applying it rewrites those values afterwards.<br>"
-    "Right-click the column header to filter by <b>reg add</b> / <b>reg delete</b>; the choice is remembered."
-)
-
-
 STYLESHEET = """
 QMainWindow {
     background: #0f172a;
@@ -2817,7 +2804,6 @@ class RegistrySentinel(QMainWindow):
             ActionSpec(QStyle.StandardPixmap.SP_MediaPlay, "Apply All", lambda: self._start_apply(selected_only=False), attr="_act_apply_all", role="success", tooltip="Apply registry fixes to all visible non-compliant entries"),
             ActionSpec(QStyle.StandardPixmap.SP_DesktopIcon, "Reset View", self._reset_view),
             ActionSpec(QStyle.StandardPixmap.SP_FileDialogDetailedView, "View Log", self._view_log),
-            ActionSpec(QStyle.StandardPixmap.SP_MessageBoxQuestion, "Help", lambda: self._info("Registry Sentinel", HELP_TEXT), shortcut=QKeySequence(QKeySequence.StandardKey.HelpContents)),
             ActionSpec(QStyle.StandardPixmap.SP_DialogSaveButton, "Export CSV Report", self._export_csv),
         ]
 

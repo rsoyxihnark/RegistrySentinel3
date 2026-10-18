@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.0
+
+- The Help button is gone from the toolbar, and F1 no longer opens the help window.
+
 ## 1.3.0
 
 - A long path or detail in the table no longer breaks off with three dots partway across its column, and now runs to the full width.
