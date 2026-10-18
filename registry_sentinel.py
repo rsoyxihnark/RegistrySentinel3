@@ -83,13 +83,14 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem,
     QToolBar,
     QToolButton,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.2.5"
+APP_VERSION = "1.3.0"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -2678,6 +2679,15 @@ class FullTextDelegate(QStyledItemDelegate):
         super().initStyleOption(option, index)
         option.textElideMode = Qt.TextElideMode.ElideNone
 
+    def helpEvent(self, event, view, option, index) -> bool:
+        if event is not None and event.type() == QEvent.Type.ToolTip and index.isValid():
+            text = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
+            if text and self.sizeHint(option, index).width() > option.rect.width():
+                own = str(index.data(Qt.ItemDataRole.ToolTipRole) or "")
+                QToolTip.showText(event.globalPos(), f"{text}\n\n{own}" if own else text, view)
+                return True
+        return super().helpEvent(event, view, option, index)
+
 
 class RegistrySentinel(QMainWindow):
     HEADERS = TABLE_HEADERS
@@ -2955,6 +2965,7 @@ class RegistrySentinel(QMainWindow):
         header = StyledHeader(self.table)
         self.table.setHorizontalHeader(header)
         self.table.setTextElideMode(Qt.TextElideMode.ElideNone)
+        self.table.setWordWrap(False)
         header.setStretchLastSection(False)
         header.setDefaultSectionSize(220)
         header.setMinimumSectionSize(60)

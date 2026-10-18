@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0
+
+- A long path or detail in the table no longer breaks off with three dots partway across its column, and now runs to the full width.
+- Resting the pointer on a cell too narrow for its text now shows the whole of it, so a long path can be read without widening the column.
+
 ## 1.2.5
 
 - A lone `%` in a list line is now dropped the way a batch file drops it, so `search?q=%s` is no longer reported as wrong when the registry holds `search?q=s`.
