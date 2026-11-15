@@ -90,7 +90,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.4.1"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -307,11 +307,10 @@ SYNTAX_ERROR_TOOLTIP = (
 CONFLICT_TAG = f"{TYPE_MISMATCH_MARK} LIST CONFLICT"
 CONFLICT_LINE_DISPLAY = 4
 CONFLICT_TOOLTIP = (
-    "List conflict: other lines write this same target differently.\n"
-    "Two 'reg add' lines with different data, a 'reg add' and a 'reg delete' for the same "
-    "value, or a key delete that wipes what an earlier line writes: whichever line runs "
-    "last wins, so the list has no defined result and every scan flips the other line back "
-    "to non-compliant. Remove the wrong line."
+    "List conflict: other lines write this target differently.\n"
+    "Different data, an add and a delete of one value, or a key delete wiping an earlier line.\n"
+    "The last to run wins, so each scan flips the other back to non-compliant. "
+    "Remove the wrong line."
 )
 
 RESET_EXPECTED_TEXT = "Only listed values"
@@ -2671,7 +2670,8 @@ class FullTextDelegate(QStyledItemDelegate):
             text = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
             if text and self.sizeHint(option, index).width() > option.rect.width():
                 own = str(index.data(Qt.ItemDataRole.ToolTipRole) or "")
-                QToolTip.showText(event.globalPos(), f"{text}\n\n{own}" if own else text, view)
+                tip = f"{text}\n\n{own}" if own and own != text else text
+                QToolTip.showText(event.globalPos(), tip, view)
                 return True
         return super().helpEvent(event, view, option, index)
 
@@ -3777,6 +3777,7 @@ class RegistrySentinel(QMainWindow):
         operation_actions = self._add_operation_filter_actions(menu)
 
         chosen = menu.exec(header.mapToGlobal(pos))
+        menu.deleteLater()
         if chosen is None:
             return
         if chosen in operation_actions:
@@ -4438,6 +4439,7 @@ class RegistrySentinel(QMainWindow):
             action_map[menu.addAction("Jump to registry")] = lambda: self._jump_to_registry(entry)
 
         chosen = menu.exec(self.table.viewport().mapToGlobal(pos))
+        menu.deleteLater()
         if chosen in action_map:
             action_map[chosen]()
 

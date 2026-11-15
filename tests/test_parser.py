@@ -107,7 +107,7 @@ class PercentTest(unittest.TestCase):
         line = (
             r'reg add "HKEY_CURRENT_USER\SOFTWARE\Policies\Microsoft\Edge" /v "ManagedSearchEngines" '
             r'/t REG_SZ /d "[{"allow_search_engine_discovery": false}, {"is_default": true, '
-            r'"keyword": "Google.com", "name": "Google", "search_url": "https://google.com/search?q=%s"}]" /f'
+            r'"keyword": "Google.com", "search_url": "https://google.com/search?q=%s"}]" /f'
         )
         entries = sentinel.RegistryCommandParser()._parse_stream([line]).entries
         self.assertEqual(len(entries), 1)
@@ -115,7 +115,7 @@ class PercentTest(unittest.TestCase):
         self.assertEqual(
             entries[0].expected,
             "[{allow_search_engine_discovery: false}, {is_default: true, keyword: Google.com, "
-            "name: Google, search_url: https://google.com/search?q=s}]",
+            "search_url: https://google.com/search?q=s}]",
         )
 
     def test_a_doubled_percent_is_one_percent(self):

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.1
+
+- Fixed a list error's message showing twice when you rest the pointer on a Details cell too narrow for it.
+- Fixed the right-click menus of the table and its column headers being kept for as long as the program is running.
+- The list conflict tooltip on the Select box is now shorter, and still names each kind of conflict and how to fix it.
+
 ## 1.4.0
 
 - The Help button is gone from the toolbar, and F1 no longer opens the help window.
