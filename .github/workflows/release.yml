@@ -90,10 +90,10 @@ jobs:
           changelog = read(CHANGELOG)
           headings = [line.strip() for line in re.findall(r"^##\s+(.+?)\s*$", changelog, re.M)]
 
-          def entries_under(heading):
+          def entries_under(heading, text=None):
               block = re.search(
                   r"^##\s+" + re.escape(heading) + r"\s*$\n(.*?)(?=^##\s|\Z)",
-                  changelog,
+                  changelog if text is None else text,
                   re.M | re.S,
               )
               if block is None:
@@ -126,14 +126,48 @@ jobs:
                       f"{version} and the commit body bullet points must match word for word"
                   )
               print(f"Publishing {version} with {len(recorded)} entries")
-          else:
+          reworded = []
+          if not releasing:
               if touched_changelog and (not headings or headings[0].lower() != "unreleased"):
-                  fail("A [no release] commit records its entries under an Unreleased heading")
+                  earlier = git("show", f"{parents[1]}:CHANGELOG.md") if len(parents) > 1 else ""
+                  earlier = earlier.replace("\r\n", "\n").replace("\r", "\n")
+                  earlier_headings = [
+                      line.strip() for line in re.findall(r"^##\s+(.+?)\s*$", earlier, re.M)
+                  ]
+                  if headings != earlier_headings or any(
+                      len(entries_under(heading)) != len(entries_under(heading, earlier))
+                      for heading in headings
+                  ):
+                      fail(
+                          "A [no release] commit records new entries under an Unreleased heading "
+                          "and may only reword the entries of versions already released"
+                      )
+                  reworded = [
+                      heading
+                      for heading in headings
+                      if entries_under(heading) != entries_under(heading, earlier)
+                  ]
+                  for heading in reworded:
+                      Path(f"notes-{heading}.md").write_text(
+                          "\n".join(entries_under(heading)) + "\n", encoding="utf-8"
+                      )
+                      print(f"The published notes of {heading} will be reworded to match")
               print("Building only, this commit ships nothing to users")
 
           emit("version", version)
           emit("release", "true" if releasing else "false")
+          emit("reworded", " ".join(reworded))
           PY
+
+      - name: Bring reworded release notes in line with the changelog
+        if: steps.gate.outputs.reworded != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REWORDED: ${{ steps.gate.outputs.reworded }}
+        run: |
+          for version in $REWORDED; do
+            gh release edit "v$version" --repo "$GITHUB_REPOSITORY" --notes-file "notes-$version.md"
+          done
 
   build:
     needs: gate

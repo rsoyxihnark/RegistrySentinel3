@@ -3,7 +3,7 @@
 ## 1.4.2
 
 - Fixed a list error being reported for a `reg` line that sends its output to a quoted file path holding a space.
-- Fixed a quoted number with `>` straight after it, such as `/d "5">nul`, being read and written as `5>nul` instead of `5`.
+- Fixed a quoted number with `>` straight after it, such as `/d "5">nul`, being written as `5>nul` to a REG_SZ value and reported as a list error for a REG_DWORD value.
 
 ## 1.4.1
 
