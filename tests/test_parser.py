@@ -75,6 +75,12 @@ class ParseTest(unittest.TestCase):
         entry = self.only(r"reg delete HKLM\Software\Foo /s /f")
         self.assertTrue(entry.syntax_error)
 
+    def test_deleting_a_whole_user_or_system_hive_is_a_list_error(self):
+        for key in (r"HKU\*", r"HKU\S-1-5-21-1", r"HKLM\SOFTWARE", "HKLM\\SYSTEM\\"):
+            self.assertTrue(self.only(rf"reg delete {key} /f").syntax_error, key)
+        for key in (r"HKU\S-1-5-21-1\Software\Foo", r"HKLM\SOFTWARE\Foo", r"HKCU\Software"):
+            self.assertFalse(self.only(rf"reg delete {key} /f").syntax_error, key)
+
     def test_line_without_a_registry_command_is_skipped(self):
         result = self.parse("echo nothing here")
         self.assertEqual(result.entries, [])
@@ -164,6 +170,21 @@ class PercentTest(unittest.TestCase):
         self.assertEqual(entry.path, r"Software\abcdef")
         entry = parse([r"reg add HKLM\Software\%%RS_TEST_SET%% /v A /d 1 /f"]).entries[0]
         self.assertEqual(entry.path, r"Software\%RS_TEST_SET%")
+
+    def test_a_variable_set_earlier_in_the_list_is_replaced_by_its_value(self):
+        entries = sentinel.RegistryCommandParser()._parse_stream((
+            r'set "KEY=HKCU\Software\Demo"',
+            r'SET DATA=one ^& two',
+            r'set "QUOTED=a & b" & set RS_TEST_SET=',
+            r'reg add "%key%" /v A /d "%DATA%|%QUOTED%|%RS_TEST_SET%" /f',
+            r"set /a KEY=1",
+            r"set DATA=",
+            r'reg add "%KEY%" /v B /d "x%DATA%y" /f',
+        )).entries
+        self.assertEqual(
+            [(e.path, e.value_name, e.expected) for e in entries],
+            [(r"Software\Demo", "A", "one & two|a & b|"), (r"Software\Demo", "B", "xy")],
+        )
 
 
 class ListFileTest(unittest.TestCase):

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0
+
+- A `set NAME=value` line in a .bat or .cmd list now gives `%NAME%` that value in the lines after it, the same as in a batch file.
+- A `reg delete` of a whole user or system hive, such as `HKU\*` or `HKLM\SOFTWARE`, is now reported as a list error instead of being applied.
+- Fixed the window reopening oversized and no longer maximized, or on another monitor, when Registry Sentinel was closed while maximized.
+
 ## 1.4.2
 
 - Fixed a list error being reported for a `reg` line that sends its output to a quoted file path holding a space.

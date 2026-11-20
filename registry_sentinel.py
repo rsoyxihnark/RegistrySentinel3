@@ -90,7 +90,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.4.2"
+APP_VERSION = "1.5.0"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -415,7 +415,54 @@ def _modify_batch_value(value: str, modifier: str) -> Optional[str]:
     return re.sub(re.escape(pattern), lambda _: replacement, value, flags=re.IGNORECASE)
 
 
-def _expand_batch_percents(line: str) -> str:
+def _batch_variable(name: str, variables: dict[str, Optional[str]]) -> Optional[str]:
+    key = name.casefold()
+    return variables[key] if key in variables else os.environ.get(name)
+
+
+_SET_COMMAND = re.compile(r"set\s+(?!/)(.*)", re.IGNORECASE)
+
+
+def _batch_commands(line: str) -> list[str]:
+    commands: list[list[str]] = [[]]
+    quoted = False
+    redirected = False
+    index = 0
+    while index < len(line):
+        char = line[index]
+        if char == '"':
+            quoted = not quoted
+        elif not quoted and char == "^" and index + 1 < len(line):
+            index += 1
+            char = line[index]
+        elif not quoted and char in "&|":
+            commands.append([])
+            redirected = False
+            index += 1
+            continue
+        elif not quoted and char in "<>":
+            redirected = True
+        if not redirected:
+            commands[-1].append(char)
+        index += 1
+    return ["".join(command).lstrip() for command in commands]
+
+
+def _record_batch_sets(line: str, variables: dict[str, Optional[str]]) -> None:
+    for command in _batch_commands(line):
+        assignment = _SET_COMMAND.match(command)
+        if assignment is None:
+            continue
+        body = assignment.group(1)
+        if body.startswith('"'):
+            closing = body.rfind('"')
+            body = body[1:closing] if closing > 0 else body[1:]
+        name, equals, value = body.partition("=")
+        if equals and name:
+            variables[name.casefold()] = value or None
+
+
+def _expand_batch_percents(line: str, variables: dict[str, Optional[str]]) -> str:
     parts: list[str] = []
     index = 0
     while True:
@@ -439,7 +486,7 @@ def _expand_batch_percents(line: str) -> str:
         if not stops:
             continue
         stop = min(stops)
-        value = os.environ.get(line[index:stop]) if stop > index else None
+        value = _batch_variable(line[index:stop], variables) if stop > index else None
         if line[stop] == "%":
             parts.append(value or "")
             index = stop + 1
@@ -953,6 +1000,7 @@ class RegistryCommandParser:
     _COMMAND_NAMES = frozenset(("reg", "reg.exe"))
     _ADD_ARGUMENT_SWITCHES = frozenset(("/v", "/t", "/d", "/s"))
     _DELETE_ARGUMENT_SWITCHES = frozenset(("/v",))
+    _HIVE_HOLDERS = frozenset((winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_USERS))
 
     def parse_file(self, file_path: Path) -> ParseResult:
         logger.info("Loading registry command list: %s", file_path)
@@ -975,13 +1023,14 @@ class RegistryCommandParser:
     def _parse_stream(self, stream: Iterable[str]) -> ParseResult:
         entries: list[RegistryEntry] = []
         skipped: list[tuple[int, str]] = []
+        variables: dict[str, Optional[str]] = {}
         for index, raw_line in enumerate(stream, start=1):
             line = raw_line.strip()
             if line.startswith("@"):
                 line = line[1:].strip()
             if not line or line.startswith(self.COMMENT_PREFIXES) or self.REM_COMMENT.match(line):
                 continue
-            parsed = self._parse_line(line, index)
+            parsed = self._parse_line(line, index, variables)
             if parsed:
                 entries.extend(parsed)
             else:
@@ -1073,9 +1122,13 @@ class RegistryCommandParser:
         if command:
             yield command
 
-    def _parse_line(self, line: str, line_number: int) -> list[RegistryEntry]:
+    def _parse_line(
+        self, line: str, line_number: int, variables: dict[str, Optional[str]]
+    ) -> list[RegistryEntry]:
+        expanded = _expand_batch_percents(line, variables)
+        _record_batch_sets(expanded, variables)
         entries: list[RegistryEntry] = []
-        for tokens in self._split_commands(self._tokenize(_expand_batch_percents(line))):
+        for tokens in self._split_commands(self._tokenize(expanded)):
             if tokens[0].rsplit("\\", 1)[-1].casefold() not in self._COMMAND_NAMES:
                 continue
             try:
@@ -1220,8 +1273,14 @@ class RegistryCommandParser:
         if not hive_handle:
             raise _LineSyntaxError(f"unknown registry hive '{hive_name}'")
 
-        if operation == Operation.DELETE and value_name is None and not all_values and not sub_path:
-            raise _LineSyntaxError(f"refusing to delete the whole {hive_name.upper()} hive")
+        if operation == Operation.DELETE and value_name is None and not all_values:
+            key_path = sub_path.strip("\\")
+            if not key_path:
+                raise _LineSyntaxError(f"refusing to delete the whole {hive_name.upper()} hive")
+            if hive_handle in self._HIVE_HOLDERS and "\\" not in key_path:
+                raise _LineSyntaxError(
+                    f"refusing to delete the whole {hive_name.upper()}\\{key_path} hive"
+                )
 
         sub_paths = self._expand_sub_paths(hive_handle, sub_path)
         return [
@@ -2698,6 +2757,8 @@ class RegistrySentinel(QMainWindow):
         geometry_restored = self._restore_window_geometry()
         if not geometry_restored:
             self._apply_pending_window_size(defer=True)
+        elif self._pending_maximized:
+            self.setWindowState(Qt.WindowState.WindowMaximized)
         self._load_default_list()
 
         if self._entries:
@@ -2710,6 +2771,7 @@ class RegistrySentinel(QMainWindow):
         self._column_widths: dict[str, int] = {}
         self._pending_window_size: Optional[QSize] = None
         self._pending_window_pos: Optional[QPoint] = None
+        self._pending_maximized: bool = False
         self._state_toggles: dict[str, ToggleSwitch] = {}
         self._operation_visibility: dict[Operation, bool] = dict(DEFAULT_OPERATION_VISIBILITY)
 
@@ -3249,6 +3311,11 @@ class RegistrySentinel(QMainWindow):
         return False
 
     _SETTINGS_SECTION = "Session"
+    _NOT_NORMAL_STATES = (
+        Qt.WindowState.WindowMinimized
+        | Qt.WindowState.WindowMaximized
+        | Qt.WindowState.WindowFullScreen
+    )
 
     def _load_last_session(self) -> None:
         path = self._settings_path()
@@ -3266,6 +3333,8 @@ class RegistrySentinel(QMainWindow):
         pos_raw = cfg.get(section, "window_pos", fallback=None)
         if pos_raw:
             self._pending_window_pos = self._parse_window_pos(pos_raw)
+        maximized_raw = cfg.get(section, "window_maximized", fallback="")
+        self._pending_maximized = maximized_raw.strip().lower() == "true"
         columns_raw = cfg.get(section, "column_widths", fallback=None)
         parsed_columns: dict[str, int] = (
             self._parse_column_widths(columns_raw) if columns_raw else {}
@@ -3302,11 +3371,19 @@ class RegistrySentinel(QMainWindow):
         cfg.add_section(section)
         if self._list_path:
             cfg.set(section, "last_file", str(self._list_path))
-        size = self.size()
+        size, pos = self.size(), self.pos()
+        state = self.windowState()
+        handle = self.windowHandle()
+        if handle is not None and state & self._NOT_NORMAL_STATES:
+            normal = self.normalGeometry()
+            margins = handle.frameMargins()
+            size = normal.size()
+            pos = normal.topLeft() - QPoint(margins.left(), margins.top())
         if size.isValid():
             cfg.set(section, "window_size", f"{size.width()}x{size.height()}")
-        pos = self.pos()
         cfg.set(section, "window_pos", f"{pos.x()},{pos.y()}")
+        maximized = bool(state & Qt.WindowState.WindowMaximized)
+        cfg.set(section, "window_maximized", "true" if maximized else "false")
         if self._column_widths:
             serialized = self._serialize_column_widths(self._column_widths)
             if serialized:
@@ -3350,7 +3427,7 @@ class RegistrySentinel(QMainWindow):
             self._pending_window_size = None
         pos = self._pending_window_pos
         self._pending_window_pos = None
-        screen = QApplication.screenAt(pos) or QApplication.primaryScreen()
+        screen = QApplication.screenAt(QRect(pos, self.size()).center()) or QApplication.primaryScreen()
         if screen is not None:
             available = screen.availableGeometry()
             win_size = self.size()
