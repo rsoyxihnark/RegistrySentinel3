@@ -55,6 +55,18 @@ class ParseTest(unittest.TestCase):
         self.assertFalse(entry.syntax_error)
         self.assertIs(entry.value_type, sentinel.ValueType.DWORD)
 
+    def test_redirection_to_a_quoted_path_with_a_space_still_parses(self):
+        for tail in ('>>"C:\\My Logs\\reg.log"', '2>"C:\\My Logs\\err.log"'):
+            entry = self.only(rf"reg add HKLM\Software\Foo /v A /d 1 /f {tail}")
+            self.assertFalse(entry.syntax_error, tail)
+            self.assertEqual(entry.expected, "1", tail)
+
+    def test_quoted_digits_before_a_redirection_are_the_whole_data(self):
+        for value_type in ("REG_SZ", "REG_DWORD"):
+            entry = self.only(rf'reg add HKLM\Software\Foo /v A /t {value_type} /d "5">nul')
+            self.assertFalse(entry.syntax_error, value_type)
+            self.assertEqual(entry.expected, "5", value_type)
+
     def test_separator_inside_quoted_data_is_kept(self):
         entry = self.only(r'reg add HKLM\Software\Foo /v A /t REG_SZ /d "one & two" /f')
         self.assertEqual(entry.expected, "one & two")

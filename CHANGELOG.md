@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.2
+
+- Fixed a list error being reported for a `reg` line that sends its output to a quoted file path holding a space.
+- Fixed a quoted number with `>` straight after it, such as `/d "5">nul`, being read and written as `5>nul` instead of `5`.
+
 ## 1.4.1
 
 - Fixed a list error's message showing twice when you rest the pointer on a Details cell too narrow for it.

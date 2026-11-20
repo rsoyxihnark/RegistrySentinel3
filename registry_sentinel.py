@@ -90,7 +90,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.4.2"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -941,7 +941,7 @@ class RegistryCommandParser:
     COMMENT_PREFIXES = ("#", "//", ";", "::")
     REM_COMMENT = re.compile(r"rem(?:\s|$)", re.IGNORECASE)
 
-    _REDIRECT = re.compile(r"\d*>{1,2}(?:&\d+|\S+)?")
+    _REDIRECT = re.compile(r"\d*>{1,2}.*")
     _SEPARATORS = frozenset(("&", "&&", "|", "||"))
     _CHAIN_CHARS = frozenset("&|")
     _ESCAPE = "^"
@@ -1041,7 +1041,9 @@ class RegistryCommandParser:
                         quoted = not quoted
                 elif not quoted and char in " \t":
                     break
-                elif not quoted and index > token_start and cls._starts_new_token(token, char):
+                elif not quoted and index > token_start and cls._starts_new_token(
+                    token, line[token_start:index], char
+                ):
                     break
                 else:
                     token.append(char)
@@ -1051,12 +1053,12 @@ class RegistryCommandParser:
         return tokens
 
     @classmethod
-    def _starts_new_token(cls, token: list[str], char: str) -> bool:
+    def _starts_new_token(cls, token: list[str], raw: str, char: str) -> bool:
         if token and token[-1].endswith(">"):
             return False
         if char in cls._CHAIN_CHARS:
             return True
-        return char == ">" and not "".join(token).isdigit()
+        return char == ">" and not raw.isdigit()
 
     @classmethod
     def _split_commands(cls, tokens: list[str]) -> Iterable[list[str]]:
