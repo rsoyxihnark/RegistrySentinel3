@@ -89,6 +89,11 @@ class FakeRegistry:
                 raise FileNotFoundError(name)
             del handle.node.values[name]
 
+        def query_value(handle, name):
+            if name not in handle.node.values:
+                raise FileNotFoundError(name)
+            return handle.node.values[name]
+
         def enum_key(handle, index):
             names = list(handle.node.subkeys)
             if index >= len(names):
@@ -110,6 +115,7 @@ class FakeRegistry:
             DeleteKeyEx=self.delete_key,
             SetValueEx=set_value,
             DeleteValue=delete_value,
+            QueryValueEx=query_value,
             EnumKey=enum_key,
             EnumValue=enum_value,
         )
@@ -186,6 +192,29 @@ class ApplyTest(unittest.TestCase):
         self.assertEqual((outcome.succeeded, outcome.failed), (1, 0))
         node = registry.key(HKLM, "Software\\New\\Deep")
         self.assertEqual(node.values["Count"], (5, sentinel.winreg.REG_DWORD))
+
+    def test_every_value_an_apply_writes_scans_as_compliant(self):
+        registry = FakeRegistry({"Software\\Reset": {"Stray": "x"}})
+        entries = sentinel.RegistryCommandParser()._parse_stream((
+            r"reg add HKLM\Software\Demo /v Text /t REG_SZ /d hello /f",
+            r"reg add HKLM\Software\Demo /v Path /t REG_EXPAND_SZ /d %%SystemRoot%%\x /f",
+            r"reg add HKLM\Software\Demo /v Hex /t REG_DWORD /d 0xFFFFFFFF /f",
+            r"reg add HKLM\Software\Demo /v Minus /t REG_DWORD /d -1 /f",
+            r"reg add HKLM\Software\Demo /v Big /t REG_QWORD /d 0x10 /f",
+            r"reg add HKLM\Software\Demo /v Raw /t REG_BINARY /d 0a0B /f",
+            r"reg add HKLM\Software\Demo /v List /t REG_MULTI_SZ /d a,b /s , /f",
+            r"reg add HKLM\Software\Demo /v Nothing /t REG_NONE /f",
+            r"reg add HKLM\Software\Demo /ve /d default /f",
+            r"reg add HKLM\Software\Demo\Empty /f",
+            r"reg delete HKLM\Software\Demo /v Gone /f",
+            r"reg delete HKLM\Software\Reset /f",
+            r"reg add HKLM\Software\Reset /v Kept /d 1 /f",
+        )).entries
+        with registry.patched():
+            outcome = sentinel.RegistryApplier().execute(entries)
+            results = sentinel.RegistryInspector().scan(entries)
+        self.assertEqual((outcome.succeeded, outcome.failed), (len(entries), 0))
+        self.assertEqual([r.detail for r in results if r.compliant is not True], [])
 
 
 class ResetSafetyTest(unittest.TestCase):
