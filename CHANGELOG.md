@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.6.0
+
+- The toolbar buttons and the search box now have sharp matching icons in place of the old Windows ones.
+- Registry Sentinel now has its own shield icon on the file in File Explorer, on the title bar and on the taskbar.
+- The title bar is now dark to match the rest of the window.
+- The scroll bars and the strip beside the last column header are now dark to match the table.
+- The column the table is sorted by is now underlined in its header.
+- The dividers between the toolbar button groups now match the dark toolbar.
+- An empty table now says why: no list loaded, no reg add or reg delete lines in the list, or every entry hidden.
+- When every entry is compliant and Compliant is switched off, the table now says so instead of showing nothing.
+- The Compliant, Non-Compliant and Pending switches now dim their label when switched off and fade smoothly between on and off.
+- Reset View, View Log and Export CSV Report now say what they do when you rest the pointer on them.
+
 ## 1.5.0
 
 - A `set NAME=value` line in a .bat or .cmd list now gives `%NAME%` that value in the lines after it, the same as in a batch file.

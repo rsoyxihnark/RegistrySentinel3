@@ -34,8 +34,10 @@ from PyQt6.QtCore import (
     QEvent,
     QItemSelectionModel,
     QPoint,
+    QPointF,
     QPropertyAnimation,
     QRect,
+    QRectF,
     QSize,
     Qt,
     QtMsgType,
@@ -52,10 +54,14 @@ from PyQt6.QtGui import (
     QColor,
     QFont,
     QFontMetrics,
+    QIcon,
     QKeySequence,
+    QLinearGradient,
     QMouseEvent,
     QPainter,
+    QPainterPath,
     QPen,
+    QPixmap,
     QPolygon,
     QShortcut,
 )
@@ -90,7 +96,7 @@ from PyQt6.QtWidgets import (
 
 
 LOG_FILENAME = "sentinel.log"
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.6.0"
 logger = logging.getLogger(__name__)
 _qt_logger = logging.getLogger("PyQt6")
 
@@ -1895,7 +1901,7 @@ MAX_SKIPPED_DISPLAY = 25
 
 @dataclass(slots=True)
 class ActionSpec:
-    icon: QStyle.StandardPixmap
+    icon: str
     text: str
     handler: Callable[[], None]
     attr: str = ""
@@ -2002,7 +2008,14 @@ QToolBar {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
         stop:0 #1e293b, stop:0.5 #2563eb, stop:1 #1e293b);
     border: none;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
     padding: 6px;
+}
+
+QToolBar::separator {
+    background: rgba(226, 232, 240, 0.28);
+    width: 1px;
+    margin: 8px 6px;
 }
 
 QToolBar QToolButton {
@@ -2102,6 +2115,65 @@ QTableWidget {
 
 QTableWidget::item:hover {
     background-color: rgba(59, 130, 246, 0.10);
+}
+
+QHeaderView {
+    background-color: rgba(30, 41, 59, 0.95);
+    border: none;
+}
+
+QTableCornerButton::section {
+    background-color: rgba(30, 41, 59, 0.95);
+    border: none;
+}
+
+QScrollBar:vertical {
+    background: transparent;
+    width: 12px;
+    margin: 2px 2px 2px 0;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 12px;
+    margin: 0 2px 2px 2px;
+}
+
+QScrollBar::handle:vertical {
+    background: rgba(148, 163, 184, 0.32);
+    border-radius: 3px;
+    min-height: 36px;
+    margin: 0 2px;
+}
+
+QScrollBar::handle:horizontal {
+    background: rgba(148, 163, 184, 0.32);
+    border-radius: 3px;
+    min-width: 36px;
+    margin: 2px 0;
+}
+
+QScrollBar::handle:vertical:hover,
+QScrollBar::handle:horizontal:hover {
+    background: rgba(148, 163, 184, 0.5);
+}
+
+QScrollBar::handle:vertical:pressed,
+QScrollBar::handle:horizontal:pressed {
+    background: rgba(96, 165, 250, 0.75);
+}
+
+QScrollBar::add-line,
+QScrollBar::sub-line {
+    width: 0;
+    height: 0;
+    border: none;
+    background: none;
+}
+
+QScrollBar::add-page,
+QScrollBar::sub-page {
+    background: none;
 }
 
 QHeaderView::section {
@@ -2213,6 +2285,7 @@ QLineEdit#inlineFindInput {
     border-radius: 10px;
     color: #f8fafc;
     padding: 6px 12px;
+    padding-left: 4px;
     padding-right: 28px;
     min-width: 260px;
     selection-background-color: rgba(59, 130, 246, 0.55);
@@ -2294,11 +2367,6 @@ QLabel#footerEntries {
     font-weight: 600;
 }
 
-QLabel#findIcon {
-    font-size: 16px;
-    color: #a5b4fc;
-}
-
 QProgressBar#footerProgress {
     background: rgba(15, 23, 42, 0.85);
     border-radius: 12px;
@@ -2311,6 +2379,252 @@ QProgressBar#footerProgress::chunk {
 }
 
 """
+
+GLYPH_GRID = 24.0
+GLYPH_STROKE = 2.0
+GLYPH_RATIOS: tuple[float, ...] = (1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0)
+GLYPH_DISABLED_ALPHA = 0.4
+ICON_ROLE_COLORS: dict[str, str] = {
+    "primary": "#f8fafc",
+    "success": "#f8fafc",
+    "warning": "#0f172a",
+    "secondary": "#e2e8f0",
+}
+FIND_ICON_COLOR = "#a5b4fc"
+WINDOW_ICON_SIZES: tuple[int, ...] = (16, 20, 24, 32, 40, 48, 64, 128, 256)
+SHIELD_GRADIENT: tuple[tuple[float, str], ...] = ((0.0, "#38bdf8"), (0.55, "#3b82f6"), (1.0, "#8b5cf6"))
+
+EMPTY_GLYPH_COLOR = "#475569"
+EMPTY_TITLE_COLOR = "#94a3b8"
+EMPTY_HINT_COLOR = "#64748b"
+EMPTY_GLYPH_SIZE = 44
+EMPTY_NO_LIST_TITLE = "No registry list loaded"
+EMPTY_NO_LIST_HINT = "Use Load List (Ctrl+O) for the List file next to Registry Sentinel, or Browse List to pick one"
+EMPTY_NO_ENTRIES_TITLE = "No registry commands found in {name}"
+EMPTY_NO_ENTRIES_HINT = "Only reg add and reg delete lines become entries. View List opens the file to check it."
+EMPTY_ALL_HIDDEN_TITLE = "No entries to show"
+EMPTY_ALL_HIDDEN_HINT = "The search, the switches below or the Type filter are hiding every entry"
+EMPTY_ALL_COMPLIANT_TITLE = "All entries are compliant"
+EMPTY_ALL_COMPLIANT_HINT = "Switch on Compliant below to list them"
+
+TOGGLE_TEXT_ON_COLOR = "#e2e8f0"
+TOGGLE_TEXT_OFF_COLOR = "#94a3b8"
+TOGGLE_GLOW_ALPHA = 0.35
+
+DWMWA_USE_IMMERSIVE_DARK_MODE_LEGACY = 19
+DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+DWMWA_BORDER_COLOR = 34
+DWMWA_CAPTION_COLOR = 35
+DWMWA_TEXT_COLOR = 36
+SWP_FRAME_REFRESH = 0x0001 | 0x0002 | 0x0004 | 0x0010 | 0x0020
+TITLE_BAR_COLOR = "#1e293b"
+TITLE_TEXT_COLOR = "#e2e8f0"
+WINDOW_BORDER_COLOR = "#334155"
+
+
+def _blend(start: QColor, end: QColor, amount: float) -> QColor:
+    amount = max(0.0, min(1.0, amount))
+    return QColor(
+        round(start.red() + (end.red() - start.red()) * amount),
+        round(start.green() + (end.green() - start.green()) * amount),
+        round(start.blue() + (end.blue() - start.blue()) * amount),
+        round(start.alpha() + (end.alpha() - start.alpha()) * amount),
+    )
+
+
+def _polyline(path: QPainterPath, *points: tuple[float, float]) -> None:
+    path.moveTo(*points[0])
+    for point in points[1:]:
+        path.lineTo(*point)
+
+
+def _glyph_path(name: str) -> QPainterPath:
+    path = QPainterPath()
+    if name == "file":
+        path.moveTo(14, 2)
+        path.lineTo(6, 2)
+        path.quadTo(4, 2, 4, 4)
+        path.lineTo(4, 20)
+        path.quadTo(4, 22, 6, 22)
+        path.lineTo(18, 22)
+        path.quadTo(20, 22, 20, 20)
+        path.lineTo(20, 8)
+        path.closeSubpath()
+        _polyline(path, (14, 2), (14, 8), (20, 8))
+        _polyline(path, (8, 9), (10, 9))
+        _polyline(path, (8, 13), (16, 13))
+        _polyline(path, (8, 17), (16, 17))
+    elif name == "folder":
+        path.moveTo(5, 20)
+        path.quadTo(3, 20, 3, 18)
+        path.lineTo(3, 6)
+        path.quadTo(3, 4, 5, 4)
+        path.lineTo(9, 4)
+        path.lineTo(11, 6.5)
+        path.lineTo(18, 6.5)
+        path.quadTo(20, 6.5, 20, 8.5)
+        path.lineTo(20, 10)
+        path.moveTo(5, 20)
+        path.lineTo(7.2, 11.4)
+        path.quadTo(7.6, 10, 9, 10)
+        path.lineTo(20.6, 10)
+        path.quadTo(22.2, 10, 21.8, 11.6)
+        path.lineTo(20, 18.6)
+        path.quadTo(19.6, 20, 18.2, 20)
+        path.closeSubpath()
+    elif name == "eye":
+        path.moveTo(2, 12)
+        path.cubicTo(4.5, 7, 8, 5, 12, 5)
+        path.cubicTo(16, 5, 19.5, 7, 22, 12)
+        path.cubicTo(19.5, 17, 16, 19, 12, 19)
+        path.cubicTo(8, 19, 4.5, 17, 2, 12)
+        path.closeSubpath()
+        path.addEllipse(QPointF(12, 12), 3, 3)
+    elif name == "scan":
+        for x, y, dx, dy in ((3, 3, 1, 1), (21, 3, -1, 1), (21, 21, -1, -1), (3, 21, 1, -1)):
+            path.moveTo(x, y + 4 * dy)
+            path.lineTo(x, y + 2 * dy)
+            path.quadTo(x, y, x + 2 * dx, y)
+            path.lineTo(x + 4 * dx, y)
+        _polyline(path, (7, 12), (17, 12))
+    elif name == "check_box":
+        path.addRoundedRect(QRectF(3, 3, 18, 18), 3, 3)
+        _polyline(path, (8, 12), (11, 15), (16, 9))
+    elif name == "check_all":
+        _polyline(path, (18, 6), (7, 17), (2, 12))
+        _polyline(path, (22, 10), (14.5, 17.5), (13, 16))
+    elif name == "reset":
+        ring = QRectF(3, 3, 18, 18)
+        path.arcMoveTo(ring, 180)
+        path.arcTo(ring, 180, 315)
+        path.lineTo(3, 8)
+        _polyline(path, (3, 3), (3, 8), (8, 8))
+    elif name == "log":
+        for y in (6, 12, 18):
+            _polyline(path, (3.5, y), (3.51, y))
+            _polyline(path, (8, y), (21, y))
+    elif name == "export":
+        path.moveTo(21, 15)
+        path.lineTo(21, 19)
+        path.quadTo(21, 21, 19, 21)
+        path.lineTo(5, 21)
+        path.quadTo(3, 21, 3, 19)
+        path.lineTo(3, 15)
+        _polyline(path, (7, 10), (12, 15), (17, 10))
+        _polyline(path, (12, 15), (12, 3))
+    elif name == "search":
+        path.addEllipse(QPointF(11, 11), 7, 7)
+        _polyline(path, (21, 21), (16, 16))
+    return path
+
+
+def _draw_glyph(painter: QPainter, name: str, area: QRectF, color: QColor) -> None:
+    painter.save()
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.translate(area.topLeft())
+    painter.scale(area.width() / GLYPH_GRID, area.height() / GLYPH_GRID)
+    painter.setPen(
+        QPen(color, GLYPH_STROKE, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    )
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.drawPath(_glyph_path(name))
+    painter.restore()
+
+
+def _glyph_pixmap(name: str, color: QColor, size: int, ratio: float) -> QPixmap:
+    pixels = max(1, round(size * ratio))
+    pixmap = QPixmap(pixels, pixels)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    _draw_glyph(painter, name, QRectF(0, 0, pixels, pixels), color)
+    painter.end()
+    pixmap.setDevicePixelRatio(ratio)
+    return pixmap
+
+
+def _line_icon(name: str, color: str, size: int = 22) -> QIcon:
+    normal = QColor(color)
+    disabled = QColor(normal)
+    disabled.setAlphaF(GLYPH_DISABLED_ALPHA)
+    icon = QIcon()
+    for ratio in GLYPH_RATIOS:
+        icon.addPixmap(_glyph_pixmap(name, normal, size, ratio), QIcon.Mode.Normal)
+        icon.addPixmap(_glyph_pixmap(name, disabled, size, ratio), QIcon.Mode.Disabled)
+    return icon
+
+
+def _shield_path() -> QPainterPath:
+    path = QPainterPath()
+    path.moveTo(12, 1.5)
+    path.lineTo(20.5, 4.8)
+    path.lineTo(20.5, 11)
+    path.cubicTo(20.5, 16.4, 16.8, 20.6, 12, 22.5)
+    path.cubicTo(7.2, 20.6, 3.5, 16.4, 3.5, 11)
+    path.lineTo(3.5, 4.8)
+    path.closeSubpath()
+    return path
+
+
+def _shield_pixmap(size: int) -> QPixmap:
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.scale(size / GLYPH_GRID, size / GLYPH_GRID)
+    gradient = QLinearGradient(QPointF(4, 2), QPointF(20, 22))
+    for stop, color in SHIELD_GRADIENT:
+        gradient.setColorAt(stop, QColor(color))
+    shield = _shield_path()
+    painter.setPen(QPen(QBrush(gradient), 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    painter.setBrush(QBrush(gradient))
+    painter.drawPath(shield)
+    painter.save()
+    painter.setClipPath(shield)
+    painter.fillRect(QRectF(0, 0, 12, GLYPH_GRID), QColor(255, 255, 255, 34))
+    painter.restore()
+    check = QPainterPath()
+    _polyline(check, (8, 12), (11, 15), (16.2, 9.2))
+    painter.setPen(QPen(QColor("#f8fafc"), 2.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.drawPath(check)
+    painter.end()
+    return pixmap
+
+
+def _sentinel_icon() -> QIcon:
+    icon = QIcon()
+    for size in WINDOW_ICON_SIZES:
+        icon.addPixmap(_shield_pixmap(size))
+    return icon
+
+
+def _colorref(color: str) -> int:
+    value = QColor(color)
+    return value.red() | (value.green() << 8) | (value.blue() << 16)
+
+
+def _style_title_bar(window: QWidget) -> None:
+    try:
+        set_attribute = ctypes.windll.dwmapi.DwmSetWindowAttribute
+        set_window_pos = ctypes.windll.user32.SetWindowPos
+    except (AttributeError, OSError) as exc:
+        logger.debug("Title bar colours unavailable: %s", exc)
+        return
+    hwnd = ctypes.c_void_p(int(window.winId()))
+
+    def apply(attribute: int, value: int) -> bool:
+        data = ctypes.c_int(value)
+        return set_attribute(hwnd, attribute, ctypes.byref(data), ctypes.sizeof(data)) == 0
+
+    if not apply(DWMWA_USE_IMMERSIVE_DARK_MODE, 1):
+        apply(DWMWA_USE_IMMERSIVE_DARK_MODE_LEGACY, 1)
+    for attribute, color in (
+        (DWMWA_CAPTION_COLOR, TITLE_BAR_COLOR),
+        (DWMWA_TEXT_COLOR, TITLE_TEXT_COLOR),
+        (DWMWA_BORDER_COLOR, WINDOW_BORDER_COLOR),
+    ):
+        apply(attribute, _colorref(color))
+    set_window_pos(hwnd, None, 0, 0, 0, 0, SWP_FRAME_REFRESH)
 
 
 class StyledHeader(QHeaderView):
@@ -2355,10 +2669,48 @@ class StyledHeader(QHeaderView):
             )
 
         painter.drawPolygon(points)
+        painter.fillRect(QRect(rect.left(), rect.bottom() - 1, rect.width(), 2), arrow_color)
         painter.restore()
 
 
 class SentinelTable(QTableWidget):
+    def __init__(self, *args: Any) -> None:
+        super().__init__(*args)
+        self._empty_message: tuple[str, str, str, str] = ("", "", "", EMPTY_GLYPH_COLOR)
+
+    def set_empty_message(self, glyph: str, title: str, hint: str, color: str = EMPTY_GLYPH_COLOR) -> None:
+        message = (glyph, title, hint, color)
+        if message != self._empty_message:
+            self._empty_message = message
+            self.viewport().update()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        glyph, title, hint, color = self._empty_message
+        if not title:
+            return
+        title_font = QFont(self.font())
+        title_font.setPointSizeF(title_font.pointSizeF() * 1.4)
+        title_font.setWeight(QFont.Weight.DemiBold)
+        title_height = QFontMetrics(title_font).height()
+        hint_height = self.fontMetrics().height()
+        area = QRectF(self.viewport().rect())
+        top = area.center().y() - (EMPTY_GLYPH_SIZE + 14 + title_height + 6 + hint_height) / 2
+        painter = QPainter(self.viewport())
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+        if glyph:
+            glyph_area = QRectF(area.center().x() - EMPTY_GLYPH_SIZE / 2, top, EMPTY_GLYPH_SIZE, EMPTY_GLYPH_SIZE)
+            _draw_glyph(painter, glyph, glyph_area, QColor(color))
+        top += EMPTY_GLYPH_SIZE + 14
+        painter.setFont(title_font)
+        painter.setPen(QColor(EMPTY_TITLE_COLOR))
+        painter.drawText(QRectF(area.left(), top, area.width(), title_height), Qt.AlignmentFlag.AlignCenter, title)
+        top += title_height + 6
+        painter.setFont(self.font())
+        painter.setPen(QColor(EMPTY_HINT_COLOR))
+        painter.drawText(QRectF(area.left(), top, area.width(), hint_height), Qt.AlignmentFlag.AlignCenter, hint)
+        painter.end()
+
     def setSortingEnabled(self, enable: bool) -> None:
         super().setSortingEnabled(enable)
         self.horizontalHeader().setSortIndicatorShown(False)
@@ -2545,9 +2897,15 @@ class ToggleSwitch(QWidget):
         switch_y = (self.height() - switch_height) // 2
         track = QRect(switch_x, switch_y, self._switch_width, switch_height)
 
-        track_color = self._color_on if self._checked else self._color_off
+        track_color = _blend(self._color_off, self._color_on, self._position)
         if not self.isEnabled():
             track_color = self._color_disabled
+        elif self._position > 0:
+            glow = QColor(self._color_on)
+            glow.setAlphaF(TOGGLE_GLOW_ALPHA * self._position)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(glow, 2))
+            painter.drawRoundedRect(QRectF(track).adjusted(-1, -1, 1, 1), switch_height / 2 + 1, switch_height / 2 + 1)
         painter.setBrush(QBrush(track_color))
         painter.setPen(QPen(track_color.darker(110), 1))
         painter.drawRoundedRect(track, switch_height // 2, switch_height // 2)
@@ -2581,7 +2939,8 @@ class ToggleSwitch(QWidget):
         painter.drawEllipse(thumb_rect)
 
         if self._text:
-            painter.setPen(QPen(QColor("#e2e8f0")))
+            text_color = _blend(QColor(TOGGLE_TEXT_OFF_COLOR), QColor(TOGGLE_TEXT_ON_COLOR), self._position)
+            painter.setPen(QPen(text_color))
             painter.setFont(self._font)
             text_x = switch_x + self._switch_width + self._padding
             text_rect = QRect(text_x, 0, self.width() - text_x - self._tail_padding, self.height())
@@ -2845,36 +3204,35 @@ class RegistrySentinel(QMainWindow):
         toolbar.setMovable(False)
         toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
 
-        style = self.style()
-
         def make_action(
-            icon: QStyle.StandardPixmap,
+            icon: QIcon,
             text: str,
             handler: Callable[[], None],
             shortcut: QKeySequence | str | None = None,
         ) -> QAction:
-            action = QAction(style.standardIcon(icon), text, self)
+            action = QAction(icon, text, self)
             if shortcut:
                 action.setShortcut(shortcut if isinstance(shortcut, QKeySequence) else QKeySequence(shortcut))
             action.triggered.connect(handler)
             return action
 
         action_specs: list[ActionSpec] = [
-            ActionSpec(QStyle.StandardPixmap.SP_FileDialogContentsView, "Load List", self._load_program_list, attr="_act_load_list", shortcut=QKeySequence(QKeySequence.StandardKey.Open), role="primary", tooltip="Load the default registry command list (Ctrl+O)"),
-            ActionSpec(QStyle.StandardPixmap.SP_DialogOpenButton, "Browse List", self._choose_list_file, attr="_act_browse_list", role="primary", tooltip="Browse for a registry command list file"),
-            ActionSpec(QStyle.StandardPixmap.SP_FileDialogInfoView, "View List", self._open_list_external, role="primary", tooltip="Open the current list file in the default editor"),
-            ActionSpec(QStyle.StandardPixmap.SP_BrowserReload, "Run Scan", self._start_scan, attr="_act_run_scan", shortcut="F5", role="warning", tooltip="F5 · Scan all loaded entries against the current registry"),
-            ActionSpec(QStyle.StandardPixmap.SP_DialogApplyButton, "Apply Selected", lambda: self._start_apply(selected_only=True), attr="_act_apply_selected", role="success", tooltip="Apply registry fixes to visible non-compliant entries you have ticked"),
-            ActionSpec(QStyle.StandardPixmap.SP_MediaPlay, "Apply All", lambda: self._start_apply(selected_only=False), attr="_act_apply_all", role="success", tooltip="Apply registry fixes to all visible non-compliant entries"),
-            ActionSpec(QStyle.StandardPixmap.SP_DesktopIcon, "Reset View", self._reset_view),
-            ActionSpec(QStyle.StandardPixmap.SP_FileDialogDetailedView, "View Log", self._view_log),
-            ActionSpec(QStyle.StandardPixmap.SP_DialogSaveButton, "Export CSV Report", self._export_csv),
+            ActionSpec("file", "Load List", self._load_program_list, attr="_act_load_list", shortcut=QKeySequence(QKeySequence.StandardKey.Open), role="primary", tooltip="Load the default registry command list (Ctrl+O)"),
+            ActionSpec("folder", "Browse List", self._choose_list_file, attr="_act_browse_list", role="primary", tooltip="Browse for a registry command list file"),
+            ActionSpec("eye", "View List", self._open_list_external, role="primary", tooltip="Open the current list file in the default editor"),
+            ActionSpec("scan", "Run Scan", self._start_scan, attr="_act_run_scan", shortcut="F5", role="warning", tooltip="F5 · Scan all loaded entries against the current registry"),
+            ActionSpec("check_box", "Apply Selected", lambda: self._start_apply(selected_only=True), attr="_act_apply_selected", role="success", tooltip="Apply registry fixes to visible non-compliant entries you have ticked"),
+            ActionSpec("check_all", "Apply All", lambda: self._start_apply(selected_only=False), attr="_act_apply_all", role="success", tooltip="Apply registry fixes to all visible non-compliant entries"),
+            ActionSpec("reset", "Reset View", self._reset_view, tooltip="Restore the default window size, columns, filters and search"),
+            ActionSpec("log", "View Log", self._view_log, tooltip="Open the Registry Sentinel log file"),
+            ActionSpec("export", "Export CSV Report", self._export_csv, tooltip="Save every entry that is not compliant to a CSV file"),
         ]
 
         SEPARATOR_AFTER_INDICES = {2, 3, 5}
         actions_with_roles: list[tuple[QAction, str]] = []
         for index, spec in enumerate(action_specs):
-            action = make_action(spec.icon, spec.text, spec.handler, spec.shortcut)
+            icon = _line_icon(spec.icon, ICON_ROLE_COLORS.get(spec.role, ICON_ROLE_COLORS["secondary"]))
+            action = make_action(icon, spec.text, spec.handler, spec.shortcut)
             if spec.tooltip:
                 action.setToolTip(spec.tooltip)
             if spec.attr:
@@ -2980,12 +3338,11 @@ class RegistrySentinel(QMainWindow):
         container.setContentsMargins(0, 0, 0, 0)
         container.setSpacing(12)
 
-        icon_label = QLabel("🔍")
-        icon_label.setObjectName("findIcon")
-        container.addWidget(icon_label)
-
         self._inline_find_input = QLineEdit()
         self._inline_find_input.setObjectName("inlineFindInput")
+        self._inline_find_input.addAction(
+            _line_icon("search", FIND_ICON_COLOR, 16), QLineEdit.ActionPosition.LeadingPosition
+        )
         self._inline_find_input.setPlaceholderText("Find in registry entries (Ctrl+F)")
         self._inline_find_input.setClearButtonEnabled(False)
         self._inline_find_input.textChanged.connect(lambda _: self._search_debounce_timer.start())
@@ -3058,6 +3415,7 @@ class RegistrySentinel(QMainWindow):
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._show_table_menu)
         self._apply_default_column_visibility()
+        self.table.set_empty_message("file", EMPTY_NO_LIST_TITLE, EMPTY_NO_LIST_HINT)
         return self.table
 
     def _create_state_toggle(self, state: str) -> ToggleSwitch:
@@ -3809,9 +4167,32 @@ class RegistrySentinel(QMainWindow):
                 )
             self._footer_entries_label.setText(f"Entries: {len(visible_ids)}{extra}")
             self._update_toggle_labels(totals_by_category)
+            self._update_empty_message()
             self._update_action_states()
 
         self._update_find_matches(select_current=True)
+
+    def _update_empty_message(self) -> None:
+        if self._visible_entry_ids:
+            self.table.set_empty_message("", "", "")
+        elif self._list_path is None:
+            self.table.set_empty_message("file", EMPTY_NO_LIST_TITLE, EMPTY_NO_LIST_HINT)
+        elif not self._entries:
+            title = EMPTY_NO_ENTRIES_TITLE.format(name=self._list_path.name)
+            self.table.set_empty_message("file", title, EMPTY_NO_ENTRIES_HINT)
+        elif self._only_compliant_switch_hides():
+            compliant_color = STATE_CONFIG["compliant"]["color"]
+            self.table.set_empty_message(
+                "check_all", EMPTY_ALL_COMPLIANT_TITLE, EMPTY_ALL_COMPLIANT_HINT, compliant_color
+            )
+        else:
+            self.table.set_empty_message("search", EMPTY_ALL_HIDDEN_TITLE, EMPTY_ALL_HIDDEN_HINT)
+
+    def _only_compliant_switch_hides(self) -> bool:
+        if self._search_query() or self._state_toggles["compliant"].isChecked():
+            return False
+        checked = [entry for entry in self._entries if not entry.access_denied]
+        return bool(checked) and all(entry.compliant is True and not entry.list_error for entry in checked)
 
     def _refresh_filters(self) -> None:
         self._last_filter_signature = None
@@ -4638,7 +5019,7 @@ def main() -> int:
     app.setOrganizationName("ClementineDev")
     app.setFont(FONT_SEGOE)
     app.setStyleSheet(STYLESHEET)
-    app.setWindowIcon(app.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon))
+    app.setWindowIcon(_sentinel_icon())
 
     if not _is_admin():
         choice = _show_admin_prompt()
@@ -4664,6 +5045,7 @@ def main() -> int:
 
     window = RegistrySentinel()
     window.show()
+    _style_title_bar(window)
 
     result = app.exec()
     logging.shutdown()

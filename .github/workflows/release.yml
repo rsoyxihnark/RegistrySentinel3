@@ -226,10 +226,45 @@ jobs:
           )
           """, encoding="utf-8")
 
+      - name: Draw the program icon
+        shell: python
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          import struct
+          import sys
+          from pathlib import Path
+
+          from PyQt6.QtCore import QBuffer, QIODevice
+          from PyQt6.QtGui import QGuiApplication
+
+          sys.path.insert(0, str(Path.cwd()))
+          import registry_sentinel
+
+          app = QGuiApplication(sys.argv)
+          images = []
+          for size in registry_sentinel.WINDOW_ICON_SIZES:
+              buffer = QBuffer()
+              buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+              if not registry_sentinel._shield_pixmap(size).save(buffer, "PNG"):
+                  sys.exit(f"Could not draw the {size} px icon")
+              images.append((size, bytes(buffer.data())))
+          offset = 6 + 16 * len(images)
+          directory = struct.pack("<HHH", 0, 1, len(images))
+          blobs = b""
+          for size, blob in images:
+              directory += struct.pack(
+                  "<BBBBHHII", size % 256, size % 256, 0, 0, 1, 32, len(blob), offset + len(blobs)
+              )
+              blobs += blob
+          Path("RegistrySentinel.ico").write_bytes(directory + blobs)
+          print(f"Wrote RegistrySentinel.ico with {len(images)} sizes")
+
       - name: Build Registry Sentinel
         run: >
           pyinstaller --noconfirm --onefile --windowed
           --version-file version_info.txt
+          --icon RegistrySentinel.ico
           --name RegistrySentinel registry_sentinel.py
 
       - name: Check the build produced an executable carrying its version
